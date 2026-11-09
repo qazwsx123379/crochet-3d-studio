@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { THEMES } from '../themes';
 import { actions, useStore } from '../store/store';
+import AccountMenu from './AccountMenu';
 
 export default function ThemeMenu() {
   const theme = useStore((s) => s.prefs.theme);
@@ -16,6 +17,7 @@ export default function ThemeMenu() {
   }, [open]);
   const current = THEMES.find((t) => t.id === theme) ?? THEMES[0];
   return (
+    <>
     <div ref={ref} style={{ position: 'relative' }}>
       <button className="btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} title="主題色">
         <span className="dot" style={{ width: 16, height: 16, borderRadius: '50%', background: current.accent, border: `3px solid ${current.bg}`, boxShadow: '0 0 0 1px var(--line)' }} />
@@ -34,5 +36,7 @@ export default function ThemeMenu() {
         </div>
       )}
     </div>
+    <AccountMenu />
+    </>
   );
 }

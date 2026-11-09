@@ -6,14 +6,17 @@
 
 | 階段 | 內容 | 狀態 |
 | --- | --- | --- |
-| 0 地基 | Firebase 登入與雲端資料、GitHub Pages 上線 | 等 Firebase 專案建立後再做 |
+| 0 地基 | Google 登入、Firestore 雲端資料（離線可看）、GitHub Pages 自動上線 | 程式完成，合併到 main 後上線 |
 | 1 織圖語法 | `(FV)*6`、巢狀重複、`[3F]`、`BLO(…)`、`R8-R12`、中文輸入、自動算針數 | 完成，待驗收 |
 | 2 織圖編輯器 | 針法按鈕（可拖拉排序、快捷鍵）、逐圈編輯、備註、復原／重做、作品庫 | 完成，待驗收 |
 | 3 顏色與符號圖 | 色票盤、品牌色、點一針／拖一段／整圈上色、符號圖兩種上色方式 | 完成，品牌色號待補 |
 | 4 3D 基本形狀 | 依針數算出形狀（繞圈、橢圓起針、片織）、視角、自動旋轉、逐圈播放、點選對應 | 完成，待驗收 |
 | 5 3D 擬真 | 每針紋理、塞棉花、立體花樣針、翻轉、白底／透明背景 | 完成，待驗收 |
 
-在第 0 階段之前，作品存在瀏覽器的 localStorage，所有存取都集中在 `src/store/store.ts`，之後換成 Firebase 不用改畫面。
+正式網站登入 Google 後，作品存在 Firestore 的 `users/{你的 uid}/…`，只有你自己讀寫得到。第一次登入時會把這台瀏覽器原本的作品（沒有的話就是範例）匯入帳號。
+claude.ai 預覽版（`npm run build:preview`）不登入，作品存在瀏覽器的 localStorage，也不打包 Firebase。所有存取都集中在 `src/store/store.ts`。
+
+推送到 `main` 時，`.github/workflows/deploy.yml` 會自動測試、打包並發布到 https://qazwsx123379.github.io/crochet-3d-studio/ （需要在 repo 的 Settings → Pages 把 Source 設成 GitHub Actions）。
 
 ## 開發
 
@@ -36,7 +39,7 @@ npm run build:preview  # 打包成單一 HTML（dist-preview/artifact.html），
 | `src/three/geometry.ts` | 從針數算出 3D 形狀（不含繪圖，可測試） |
 | `src/three/Preview3D.tsx` | three.js 畫面、針目紋理、點選 |
 | `src/ui/` | 作品庫、編輯器、符號圖、對話框 |
-| `src/store/` | 資料存取、範例零件、線材色 |
+| `src/store/` | 資料存取（`store.ts`）、Firebase（`cloud.ts`）、範例零件、線材色 |
 | `src/themes.ts` | 6 套主題色 |
 
 ## 3D 形狀怎麼算

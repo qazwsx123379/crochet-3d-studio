@@ -292,8 +292,8 @@ export default function Editor({ partId }: { partId: string }) {
         </nav>
         <div className="spacer" />
         <span className={`status-pill${save.state === 'failed' ? ' failed' : ''}`} role="status" aria-live="polite"
-          title={save.state === 'failed' ? '瀏覽器的儲存空間可能滿了' : '每次修改都會自動儲存在這台瀏覽器；第 0 階段接上雲端後會同步到所有裝置'}>
-          {save.state === 'saving' ? '儲存中…' : save.state === 'failed' ? '儲存失敗，請先複製文字備份' : save.at ? `✓ 已儲存 ${new Date(save.at).toTimeString().slice(0, 5)}` : '✓ 已儲存'}
+          title={save.state === 'failed' ? '沒有存成功，請先用「複製文字」備份' : save.state === 'offline' ? '目前沒有網路，修改會先存在這台裝置，恢復連線後自動上傳' : '每次修改都會自動儲存'}>
+          {save.state === 'saving' ? '儲存中…' : save.state === 'failed' ? '儲存失敗，請先複製文字備份' : save.state === 'offline' ? '離線中，連線後會同步' : save.at ? `✓ 已儲存 ${new Date(save.at).toTimeString().slice(0, 5)}` : '✓ 已儲存'}
         </span>
         <button className="btn icon" aria-label="復原" title="復原（Ctrl+Z）" disabled={!hist.canUndo} onClick={hist.undo}>↶</button>
         <button className="btn icon" aria-label="重做" title="重做（Ctrl+Y）" disabled={!hist.canRedo} onClick={hist.redo}>↷</button>

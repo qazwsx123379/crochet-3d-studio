@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { actions, useStore } from '../store/store';
+import { CLOUD, actions, useStore } from '../store/store';
 import type { Part, Work } from '../types';
 import Thumb from './Thumb';
 import ThemeMenu from './ThemeMenu';
@@ -98,7 +98,7 @@ export default function Library() {
             );
           })}
         </div>
-        <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>目前作品存在這台瀏覽器裡。接上雲端（第 0 階段）後，換電腦、手機也看得到。</p>
+        <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>{CLOUD ? '作品存在你的雲端帳號，換電腦、手機也看得到；看過的作品沒有網路時也能打開。' : '這是預覽版，作品只存在這台瀏覽器裡。正式網址登入後會存到雲端。'}</p>
       </div>
     </div>
   );
