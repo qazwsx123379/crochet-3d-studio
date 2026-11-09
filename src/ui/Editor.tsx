@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Part } from '../types';
 import type { PatternRow, RoundInfo } from '../pattern/analyze';
 import { analyze } from '../pattern/analyze';
@@ -106,14 +106,25 @@ export default function Editor({ partId }: { partId: string }) {
   const update = useCallback((fn: (p: Part) => Part, mergeKey?: string) => hist.set((p) => (p ? fn(p) : p), mergeKey), [hist]);
   const changeRow = useCallback((id: string, patch: Partial<PatternRow>, mergeKey?: string) => update((p) => ({ ...p, rows: p.rows.map((r) => (r.id === id ? { ...r, ...patch } : r)) }), mergeKey), [update]);
 
-  // Two frames: in 中文 display the box swaps back to code text after it gains focus.
-  const focusRow = (id: string, caret?: number) => requestAnimationFrame(() => requestAnimationFrame(() => {
-    const el = inputRefs.current.get(id);
-    if (!el) return;
+  // Focus is applied right after React renders the new text, so the cursor lands
+  // where it should and fast typing after Enter goes into the new row.
+  const pendingFocus = useRef<{ id: string; caret?: number } | null>(null);
+  const applyFocus = () => {
+    const f = pendingFocus.current;
+    const el = f && inputRefs.current.get(f.id);
+    if (!f || !el) return;
     el.focus();
-    const pos = caret ?? el.value.length;
+    const pos = Math.min(f.caret ?? el.value.length, el.value.length);
     el.setSelectionRange(pos, pos);
-  }));
+  };
+  useLayoutEffect(() => { applyFocus(); pendingFocus.current = null; });
+  const focusRow = (id: string, caret?: number) => {
+    const f = { id, caret };
+    pendingFocus.current = f;
+    applyFocus();
+    // If nothing re-renders, forget the request so it can't steal focus later.
+    requestAnimationFrame(() => { if (pendingFocus.current === f) pendingFocus.current = null; });
+  };
 
   const targetRow = (): PatternRow | undefined => part?.rows.find((r) => r.id === activeRowId) ?? part?.rows[part.rows.length - 1];
 

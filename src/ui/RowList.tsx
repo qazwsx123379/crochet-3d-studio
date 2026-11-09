@@ -59,7 +59,8 @@ export default function RowList(p: Props) {
           const label = info.first === info.last ? `R${info.first}` : `R${info.first}–${info.last}`;
           const showNote = notes.has(row.id) || row.note.length > 0;
           const isActive = p.activeRowId === row.id;
-          const value = p.display === 'chinese' && focused !== row.id ? toChinese(row.text) : row.text;
+          // The row being edited always shows the real text, so the cursor positions match.
+          const value = p.display === 'chinese' && focused !== row.id && !isActive ? toChinese(row.text) : row.text;
           return (
             <div key={row.id} className={`row${isActive ? ' active' : ''}${bad ? ' bad' : ''}`}>
               <div className="row-no">
