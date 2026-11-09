@@ -180,7 +180,8 @@ function finish(w: MeshWriter, kind: BuiltShape['kind'], placements: Placement[]
 function buildLathe(rounds: ShapeRound[], opts: ShapeOptions): BuiltShape {
   const { profile, straight } = buildProfile(rounds, opts);
   const maxN = Math.max(12, ...rounds.map((r) => r.info.stitches.length));
-  const M = Math.min(240, Math.max(72, maxN * 2));
+  // At least one segment per stitch, so every stitch can be seen, clicked and painted.
+  const M = Math.max(maxN, Math.min(240, Math.max(72, maxN * 2)));
   // Profile normals (in the r–y plane), averaged from neighbouring segments.
   const pn = profile.map((_, i) => {
     const a = profile[Math.max(0, i - 1)], b = profile[Math.min(profile.length - 1, i + 1)];
@@ -249,7 +250,7 @@ function buildFlat(rounds: ShapeRound[]): BuiltShape {
     const info = round.info;
     const h = roundHeight(info);
     const count = info.stitches.length || 1;
-    const width = Math.max(1, (info.foundation ?? info.stitches.filter((s) => STITCH_BY_CODE[s.code]?.produces > 0).length) * STITCH_W);
+    const width = Math.max(1, (info.foundation ?? info.produced) * STITCH_W);
     const x0 = -width / 2;
     const reverse = ri % 2 === 1; // every row is worked back the other way
     for (let k = 0; k < count; k++) {

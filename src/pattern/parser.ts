@@ -152,7 +152,8 @@ class Parser {
     if (tk.t === 'stitch') { this.p++; return { type: 'stitch', code: tk.v }; }
     if (tk.t === 'mod') {
       this.p++;
-      const node = this.peek()?.t === '(' ? this.group('(', ')') : this.atom();
+      // BLO(X*30), BLO X, BLO 30X
+      const node = this.peek()?.t === '(' ? this.group('(', ')') : this.item();
       return { type: 'mod', mod: tk.v, node };
     }
     if (tk.t === '(') return this.group('(', ')');
@@ -174,9 +175,12 @@ class Parser {
 
 interface Counts { consumed: number; produced: number }
 
+const MAX_STITCHES = 5000;
+
 function expand(node: Node, out: Stitch[], mod: ModifierCode | undefined, nextGroup: { v: number }, group?: number): Counts {
   switch (node.type) {
     case 'stitch': {
+      if (out.length >= MAX_STITCHES) throw new PatternSyntaxError(`這一圈超過 ${MAX_STITCHES} 針，請檢查次數`, 0);
       const def = STITCH_BY_CODE[node.code];
       out.push({ code: node.code, ...(mod ? { mod } : {}), ...(group !== undefined ? { group } : {}) });
       return { consumed: def.consumes, produced: def.produces };
@@ -212,7 +216,6 @@ export function parseRound(src: string): ParsedRound {
     const ast = parser.parse();
     const stitches: Stitch[] = [];
     const c = expand(ast, stitches, undefined, { v: 0 });
-    if (stitches.length > 5000) return { ...empty, errors: [{ message: '這一圈超過 5000 針，請檢查次數', at: 0 }] };
     return { stitches, consumed: c.consumed, produced: c.produced, magicRing: parser.magicRing, errors: [] };
   } catch (e) {
     if (e instanceof PatternSyntaxError) return { ...empty, errors: [{ message: e.message, at: e.at }] };

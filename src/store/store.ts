@@ -53,12 +53,30 @@ function load(): State {
 let state: State = load();
 const listeners = new Set<() => void>();
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let saveOk = true;
+
+function writeNow() {
+  clearTimeout(saveTimer);
+  saveTimer = undefined;
+  let ok = true;
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { ok = false; /* storage full or blocked: keep working in memory */ }
+  if (ok !== saveOk) { saveOk = ok; listeners.forEach((l) => l()); }
+}
 
 function persist() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage full or blocked: keep working in memory */ }
-  }, 300);
+  saveTimer = setTimeout(writeNow, 300);
+}
+
+// Don't lose the last edit when the tab is closed or hidden inside the save delay.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => { if (saveTimer) writeNow(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && saveTimer) writeNow(); });
+}
+
+/** False after a save to this browser failed (for example, storage is full). */
+export function useSaveOk(): boolean {
+  return useSyncExternalStore(subscribe, () => saveOk);
 }
 
 function set(next: State) {

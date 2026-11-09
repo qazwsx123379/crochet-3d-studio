@@ -2,12 +2,12 @@ import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useR
 import type { Part } from '../types';
 import type { PatternRow, RoundInfo } from '../pattern/analyze';
 import { analyze } from '../pattern/analyze';
-import { roundHexes, roundKey, stitchKey } from '../pattern/colors';
+import { roundColorIds, roundHexes, roundKey, stitchKey } from '../pattern/colors';
 import { STITCHES, STITCH_BY_CODE } from '../pattern/stitches';
 import { buildShape } from '../three/geometry';
 import type { Pick, ViewName } from '../three/Preview3D';
 import { THEMES } from '../themes';
-import { actions, useStore } from '../store/store';
+import { actions, useSaveOk, useStore } from '../store/store';
 import { newId } from '../store/yarns';
 import { useHistory } from './useHistory';
 import StitchPanel, { type PaintTool } from './StitchPanel';
@@ -45,6 +45,7 @@ function usePhone() {
 
 export default function Editor({ partId }: { partId: string }) {
   const phone = usePhone();
+  const saveOk = useSaveOk();
   const stored = useStore((s) => s.parts[partId]);
   const prefs = useStore((s) => s.prefs);
   const hist = useHistory<Part | undefined>(stored);
@@ -105,13 +106,14 @@ export default function Editor({ partId }: { partId: string }) {
   const update = useCallback((fn: (p: Part) => Part, mergeKey?: string) => hist.set((p) => (p ? fn(p) : p), mergeKey), [hist]);
   const changeRow = useCallback((id: string, patch: Partial<PatternRow>, mergeKey?: string) => update((p) => ({ ...p, rows: p.rows.map((r) => (r.id === id ? { ...r, ...patch } : r)) }), mergeKey), [update]);
 
-  const focusRow = (id: string, caret?: number) => requestAnimationFrame(() => {
+  // Two frames: in 中文 display the box swaps back to code text after it gains focus.
+  const focusRow = (id: string, caret?: number) => requestAnimationFrame(() => requestAnimationFrame(() => {
     const el = inputRefs.current.get(id);
     if (!el) return;
     el.focus();
     const pos = caret ?? el.value.length;
     el.setSelectionRange(pos, pos);
-  });
+  }));
 
   const targetRow = (): PatternRow | undefined => part?.rows.find((r) => r.id === activeRowId) ?? part?.rows[part.rows.length - 1];
 
@@ -162,7 +164,12 @@ export default function Editor({ partId }: { partId: string }) {
     focusRow(row.id);
   };
 
-  const deleteRow = (id: string) => update((p) => (p.rows.length <= 1 ? { ...p, rows: [{ ...p.rows[0], text: '', note: '', repeat: 1 }] } : { ...p, rows: p.rows.filter((r) => r.id !== id) }));
+  const deleteRow = (id: string) => update((p) => {
+    // Drop the row's colours too, so they don't come back if the row is written again.
+    const strip = (m: Record<string, string>) => Object.fromEntries(Object.entries(m).filter(([k]) => !k.startsWith(`${id}#`)));
+    const rows = p.rows.length <= 1 ? [{ ...p.rows[0], text: '', note: '', repeat: 1 }] : p.rows.filter((r) => r.id !== id);
+    return { ...p, rows, stitchColors: strip(p.stitchColors), roundColors: strip(p.roundColors) };
+  });
   const moveRow = (id: string, dir: -1 | 1) => update((p) => {
     const i = p.rows.findIndex((r) => r.id === id), j = i + dir;
     if (j < 0 || j >= p.rows.length) return p;
@@ -245,7 +252,7 @@ export default function Editor({ partId }: { partId: string }) {
       if (dialog) return;
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) hist.redo(); else hist.undo(); return; }
       if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); hist.redo(); return; }
-      if (typing || mod || e.altKey) return;
+      if (typing || mod || e.altKey || t.closest('button, a, [role=button], [role=tab]')) return;
       const st = STITCHES.find((s) => s.key && s.key === e.key.toLowerCase());
       if (st) { e.preventDefault(); insertStitch(st.code); return; }
       if (e.key === 'Enter' && part) { e.preventDefault(); focusRow(targetRow()?.id ?? part.rows[0].id); }
@@ -261,7 +268,7 @@ export default function Editor({ partId }: { partId: string }) {
   }
 
   const usage: Record<string, number> = {};
-  for (const r of analysis.rounds) for (const h of roundHexes(part, r)) { const c = part.palette.find((x) => x.hex === h); if (c) usage[c.id] = (usage[c.id] ?? 0) + 1; }
+  for (const r of analysis.rounds) for (const id of roundColorIds(part, r)) usage[id] = (usage[id] ?? 0) + 1;
 
   const copyAll = async () => {
     const text = analysis.rows.map((ri) => `${ri.first === ri.last ? `R${ri.first}` : `R${ri.first}-R${ri.last}`}: ${ri.row.text} (${ri.produced})${ri.row.note ? `  # ${ri.row.note}` : ''}`).join('\n');
@@ -281,7 +288,9 @@ export default function Editor({ partId }: { partId: string }) {
         <a className="btn icon ghost show-phone" href="#/" aria-label="回作品庫">‹</a>
         <nav className="crumbs" aria-label="位置"><a href="#/" className="hide-phone">作品庫</a><span className="hide-phone">/</span><b>{part.name}</b>{part.sample && <span className="tag">範例</span>}</nav>
         <div className="spacer" />
-        <span className="status-pill hide-phone" title="第 0 階段接上雲端後，這裡會顯示「已同步到雲端」">已存在這台瀏覽器</span>
+        {saveOk
+          ? <span className="status-pill hide-phone" title="第 0 階段接上雲端後，這裡會顯示「已同步到雲端」">已存在這台瀏覽器</span>
+          : <span className="status-pill" style={{ color: 'var(--warn)', borderColor: 'var(--warn)' }} title="瀏覽器的儲存空間可能滿了">儲存失敗，請先複製文字備份</span>}
         <button className="btn icon" aria-label="復原" title="復原（Ctrl+Z）" disabled={!hist.canUndo} onClick={hist.undo}>↶</button>
         <button className="btn icon" aria-label="重做" title="重做（Ctrl+Y）" disabled={!hist.canRedo} onClick={hist.redo}>↷</button>
         <button className="btn hide-phone" onClick={() => setDialog('import')}>貼上織圖</button>

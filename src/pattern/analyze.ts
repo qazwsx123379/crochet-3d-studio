@@ -87,7 +87,7 @@ export function analyze(rows: PatternRow[], settings: PartSettingsLike): Analysi
         no, rowId: row.id, inRow: k, stitches: parsed.stitches, consumed: parsed.consumed, produced: parsed.produced,
         expected: prevProduced, status: 'ok', message: '', loopOnly: loopOnly(parsed.stitches),
       };
-      const isFirst = rounds.length === 0;
+      const isFirst = prevProduced === undefined;
       if (parsed.errors.length) {
         info.status = 'syntax';
         info.message = parsed.errors[0].message;

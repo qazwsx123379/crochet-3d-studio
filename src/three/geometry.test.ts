@@ -69,6 +69,17 @@ describe('buildShape', () => {
     expect(b.kind).toBe('flat');
     expect(b.rings.size).toBe(4);
   });
+  it('widens flat rows that increase', () => {
+    const s = shape(rows(['ch5'], ['V*5'], ['V*10']), 'flat', 'chain');
+    const b = buildShape(s.rounds, s.opts)!;
+    const widthOf = (no: number) => { const ring = b.rings.get(no)!; return ring[1][0] - ring[0][0]; };
+    expect([widthOf(1), widthOf(2), widthOf(3)]).toEqual([5, 10, 20]);
+  });
+  it('gives every stitch of a very large round its own faces', () => {
+    const s = shape(rows(['X*300']));
+    const b = buildShape(s.rounds, s.opts)!;
+    expect(new Set(b.faceStitch).size).toBe(300);
+  });
   it('returns null with nothing to draw', () => {
     expect(buildShape([], { method: 'spiral', start: 'ring', stuffed: false })).toBeNull();
   });

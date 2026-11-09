@@ -95,6 +95,19 @@ describe('parseRound', () => {
     expect(parseRound('X)').errors[0].message).toContain('多了');
   });
 
+  it('lets a modifier take a count', () => {
+    const r = parseRound('BLO 30X');
+    expect(r.stitches).toHaveLength(30);
+    expect(r.stitches.every((s) => s.mod === 'BLO')).toBe(true);
+    expect(parseRound('後半針 6X').stitches).toHaveLength(6);
+  });
+
+  it('stops runaway repeats quickly', () => {
+    const t0 = Date.now();
+    expect(parseRound('((X*999)*999)*999').errors[0].message).toContain('5000');
+    expect(Date.now() - t0).toBeLessThan(500);
+  });
+
   it('accepts full-width digits', () => {
     expect(parseRound('X*６').stitches).toHaveLength(6);
   });
@@ -148,6 +161,12 @@ describe('analyze', () => {
     expect(a.rounds[1].status).toBe('ok');
     const flat = analyze([row('ch10'), row('X*10')], { method: 'flat', start: 'chain' });
     expect(flat.rounds[1].status).toBe('ok');
+  });
+
+  it('finds the chain foundation after a blank first row', () => {
+    const a = analyze([row(''), row('ch10'), row('X*20')], { method: 'spiral', start: 'chain' });
+    expect(a.rounds[1].foundation).toBe(10);
+    expect(a.rounds[2].status).toBe('ok');
   });
 
   it('detects back-loop rounds', () => {

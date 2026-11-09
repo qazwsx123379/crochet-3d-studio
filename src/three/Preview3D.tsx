@@ -152,8 +152,12 @@ function CameraRig({ shape, view, fitKey }: { shape: BuiltShape | null; view: Pr
     if (!shape || !controls) return;
     controls.target.set(...shape.center);
     if (lastR.current === 0 || Math.abs(shape.radius - lastR.current) / lastR.current > 0.35) {
-      const off = camera.position.clone().sub(controls.target).setLength(fitDistance(shape.radius));
+      const d = fitDistance(shape.radius);
+      const off = camera.position.clone().sub(controls.target).setLength(d);
       camera.position.copy(controls.target).add(off);
+      camera.near = Math.max(0.01, d / 100);
+      camera.far = d * 20;
+      camera.updateProjectionMatrix();
     }
     lastR.current = shape.radius;
     controls.update();

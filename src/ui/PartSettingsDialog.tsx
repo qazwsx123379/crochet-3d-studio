@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Part, YarnColor } from '../types';
 import { YARN_LINES, newId } from '../store/yarns';
 
@@ -26,12 +26,14 @@ export default function PartSettingsDialog({ part, focus, onSave, onClose, usage
     return { ...d, palette: d.palette.filter((c) => c.id !== id), stitchColors: strip(d.stitchColors), roundColors: strip(d.roundColors) };
   });
 
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current(); };
     window.addEventListener('keydown', onKey);
-    if (focus === 'palette') document.getElementById('palette-section')?.scrollIntoView();
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, focus]);
+  }, []);
+  useEffect(() => { if (focus === 'palette') document.getElementById('palette-section')?.scrollIntoView(); }, [focus]);
 
   const opt = <K extends keyof Part['settings']>(key: K, value: Part['settings'][K], title: string, sub: string) => (
     <button type="button" className="opt" aria-pressed={s[key] === value} onClick={() => set({ [key]: value } as Partial<Part['settings']>)}><b>{title}</b><span>{sub}</span></button>

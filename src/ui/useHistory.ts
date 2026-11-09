@@ -9,12 +9,13 @@ export function useHistory<T>(initial: T) {
   const last = useRef<{ key?: string; at: number }>({ at: 0 });
 
   const set = useCallback((next: T | ((prev: T) => T), mergeKey?: string) => {
+    // Decide merging here, not inside the updater, which React may call twice.
+    const now = Date.now();
+    const merge = mergeKey !== undefined && last.current.key === mergeKey && now - last.current.at < 800;
+    last.current = { key: mergeKey, at: now };
     setState((s) => {
       const value = typeof next === 'function' ? (next as (p: T) => T)(s.present) : next;
       if (value === s.present) return s;
-      const now = Date.now();
-      const merge = mergeKey !== undefined && last.current.key === mergeKey && now - last.current.at < 800;
-      last.current = { key: mergeKey, at: now };
       return { past: merge ? s.past : [...s.past.slice(-199), s.present], present: value, future: [] };
     });
   }, []);

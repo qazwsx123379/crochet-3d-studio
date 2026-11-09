@@ -6,11 +6,18 @@ export const roundKey = (r: Pick<RoundInfo, 'rowId' | 'inRow'>) => `${r.rowId}#$
 
 const FALLBACK = '#D9D4CC';
 
+/** Palette colour id of every stitch in a round (missing colours fall back to the round's, then the first). */
+export function roundColorIds(part: Part, r: RoundInfo): string[] {
+  const ids = new Set(part.palette.map((c) => c.id));
+  const rc = part.roundColors[roundKey(r)];
+  const base = rc && ids.has(rc) ? rc : part.palette[0]?.id ?? '';
+  return r.stitches.map((_, i) => { const id = part.stitchColors[stitchKey(r, i)]; return id && ids.has(id) ? id : base; });
+}
+
 /** Hex colour of every stitch in a round, in stitch order. */
 export function roundHexes(part: Part, r: RoundInfo): string[] {
   const byId = new Map(part.palette.map((c) => [c.id, c.hex]));
-  const base = byId.get(part.roundColors[roundKey(r)] ?? '') ?? part.palette[0]?.hex ?? FALLBACK;
-  return r.stitches.map((_, i) => byId.get(part.stitchColors[stitchKey(r, i)] ?? '') ?? base);
+  return roundColorIds(part, r).map((id) => byId.get(id) ?? FALLBACK);
 }
 
 /** Summarise a round's colours as runs for the little colour strip. */

@@ -21,6 +21,20 @@ interface Props {
   paintActive: boolean;
 }
 
+/** Lets the box be empty while typing; the number is applied when it is valid and tidied on blur. */
+function RepeatInput({ value, label, onCommit }: { value: number; label: string; onCommit: (n: number) => void }) {
+  const [text, setText] = useState(String(value));
+  const [editing, setEditing] = useState(false);
+  const clamp = (v: string) => Math.max(1, Math.min(200, Math.floor(Number(v)) || 1));
+  return (
+    <input type="number" min={1} max={200} value={editing ? text : String(value)} aria-label={label}
+      onFocus={() => { setEditing(true); setText(String(value)); }}
+      onChange={(e) => { setText(e.target.value); const n = Number(e.target.value); if (e.target.value !== '' && n >= 1) onCommit(clamp(e.target.value)); }}
+      onBlur={() => { setEditing(false); onCommit(clamp(text)); }}
+      style={{ width: 40, border: '1px solid var(--line)', borderRadius: 4, padding: '0 2px', background: 'var(--surface)', fontSize: 11 }} />
+  );
+}
+
 export default function RowList(p: Props) {
   const [notes, setNotes] = useState<Set<string>>(new Set());
   const [focused, setFocused] = useState<string | null>(null);
@@ -52,9 +66,7 @@ export default function RowList(p: Props) {
                 <span>{label}</span>
                 <label className="muted" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 2 }} title="這一行代表幾圈">
                   <span>×</span>
-                  <input type="number" min={1} max={200} value={row.repeat} aria-label={`${label} 重複幾圈`}
-                    onChange={(e) => p.onChange(row.id, { repeat: Math.max(1, Math.min(200, Number(e.target.value) || 1)) })}
-                    style={{ width: 40, border: '1px solid var(--line)', borderRadius: 4, padding: '0 2px', background: 'var(--surface)', fontSize: 11 }} />
+                  <RepeatInput value={row.repeat} label={`${label} 重複幾圈`} onCommit={(n) => p.onChange(row.id, { repeat: n })} />
                 </label>
               </div>
               <div className="strip-cell">
