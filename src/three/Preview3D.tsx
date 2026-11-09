@@ -179,7 +179,7 @@ export default function Preview3D({ shape, flip, texture, autoRotate, selected, 
       {ring && <Line points={ring} color={accent} lineWidth={3} depthTest={false} renderOrder={10} />}
       {marker && (
         <mesh position={new THREE.Vector3(...marker.pos).add(new THREE.Vector3(...marker.normal).multiplyScalar(0.45))} renderOrder={11}>
-          <sphereGeometry args={[0.22, 16, 12]} />
+          <sphereGeometry args={[Math.min(0.22, marker.width * 0.3), 16, 12]} />
           <meshBasicMaterial color={accent} depthTest={false} />
         </mesh>
       )}

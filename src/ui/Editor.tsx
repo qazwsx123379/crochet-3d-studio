@@ -7,7 +7,7 @@ import { STITCHES, STITCH_BY_CODE } from '../pattern/stitches';
 import { buildShape } from '../three/geometry';
 import type { Pick, ViewName } from '../three/Preview3D';
 import { THEMES } from '../themes';
-import { actions, useSaveOk, useStore } from '../store/store';
+import { actions, useSaveStatus, useStore } from '../store/store';
 import { newId } from '../store/yarns';
 import { useHistory } from './useHistory';
 import StitchPanel, { type PaintTool } from './StitchPanel';
@@ -16,6 +16,7 @@ import SymbolChart from './SymbolChart';
 import PartSettingsDialog from './PartSettingsDialog';
 import ImportDialog from './ImportDialog';
 import ThemeMenu from './ThemeMenu';
+import ComboBuilder, { type ComboKind } from './ComboBuilder';
 
 const Preview3D = lazy(() => import('../three/Preview3D'));
 
@@ -45,7 +46,7 @@ function usePhone() {
 
 export default function Editor({ partId }: { partId: string }) {
   const phone = usePhone();
-  const saveOk = useSaveOk();
+  const save = useSaveStatus();
   const stored = useStore((s) => s.parts[partId]);
   const prefs = useStore((s) => s.prefs);
   const hist = useHistory<Part | undefined>(stored);
@@ -71,6 +72,7 @@ export default function Editor({ partId }: { partId: string }) {
   const [upTo, setUpTo] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [dialog, setDialog] = useState<null | 'settings' | 'palette' | 'import'>(null);
+  const [combo, setCombo] = useState<ComboKind | null>(null);
   const [toast, setToast] = useState('');
   const segAnchor = useRef<Pick | null>(null);
   const inputRefs = useRef(new Map<string, HTMLInputElement>());
@@ -145,22 +147,6 @@ export default function Editor({ partId }: { partId: string }) {
   const insertStitch = (code: string) => insertText((before, _sel, after) => {
     const tok = joinToken(before, code);
     return { text: before + tok + after, caret: before.length + tok.length };
-  });
-
-  const wrap = (kind: 'repeat' | 'same' | 'BLO' | 'FLO' | 'times') => insertText((before, sel, after) => {
-    if (kind === 'times') {
-      // Inside "( … )*": jump past ")*" so the count can be typed straight away.
-      const m = after.match(/^\s*\)\*/);
-      if (m) return { text: before + after, caret: before.length + m[0].length };
-      return { text: `${before}*${after}`, caret: before.length + 1 };
-    }
-    const [open, close] = kind === 'repeat' ? ['(', ')*'] : kind === 'same' ? ['[', ']'] : [`${kind}(`, ')'];
-    const lead = joinToken(before, open);
-    if (sel) {
-      const text = before + lead + sel + close + after;
-      return { text, caret: before.length + lead.length + sel.length + close.length };
-    }
-    return { text: before + lead + close + after, caret: before.length + lead.length };
   });
 
   const addRowAfter = (id: string | null) => {
@@ -260,7 +246,7 @@ export default function Editor({ partId }: { partId: string }) {
       const t = e.target as HTMLElement;
       const typing = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT';
       const mod = e.ctrlKey || e.metaKey;
-      if (dialog) return;
+      if (dialog || combo) return;
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) hist.redo(); else hist.undo(); return; }
       if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); hist.redo(); return; }
       if (typing || mod || e.altKey || t.closest('button, a, [role=button], [role=tab]')) return;
@@ -297,11 +283,18 @@ export default function Editor({ partId }: { partId: string }) {
       <header className="topbar">
         <a className="brand hide-phone" href="#/">鉤織 3D 工作室</a>
         <a className="btn icon ghost show-phone" href="#/" aria-label="回作品庫">‹</a>
-        <nav className="crumbs" aria-label="位置"><a href="#/" className="hide-phone">作品庫</a><span className="hide-phone">/</span><b>{part.name}</b>{part.sample && <span className="tag">範例</span>}</nav>
+        <nav className="crumbs" aria-label="位置" style={{ alignItems: 'center' }}>
+          <a href="#/" className="hide-phone">作品庫</a><span className="hide-phone">/</span>
+          <input className="name-input" value={part.name} aria-label="零件名稱（點一下就能改）" title="點一下就能改名稱"
+            onChange={(e) => update((p) => ({ ...p, name: e.target.value }), 'name')}
+            onBlur={(e) => { if (!e.target.value.trim()) update((p) => ({ ...p, name: '未命名零件' })); }} />
+          {part.sample && <span className="tag">範例</span>}
+        </nav>
         <div className="spacer" />
-        {saveOk
-          ? <span className="status-pill hide-phone" title="第 0 階段接上雲端後，這裡會顯示「已同步到雲端」">已存在這台瀏覽器</span>
-          : <span className="status-pill" style={{ color: 'var(--warn)', borderColor: 'var(--warn)' }} title="瀏覽器的儲存空間可能滿了">儲存失敗，請先複製文字備份</span>}
+        <span className={`status-pill${save.state === 'failed' ? ' failed' : ''}`} role="status" aria-live="polite"
+          title={save.state === 'failed' ? '瀏覽器的儲存空間可能滿了' : '每次修改都會自動儲存在這台瀏覽器；第 0 階段接上雲端後會同步到所有裝置'}>
+          {save.state === 'saving' ? '儲存中…' : save.state === 'failed' ? '儲存失敗，請先複製文字備份' : save.at ? `✓ 已儲存 ${new Date(save.at).toTimeString().slice(0, 5)}` : '✓ 已儲存'}
+        </span>
         <button className="btn icon" aria-label="復原" title="復原（Ctrl+Z）" disabled={!hist.canUndo} onClick={hist.undo}>↶</button>
         <button className="btn icon" aria-label="重做" title="重做（Ctrl+Y）" disabled={!hist.canRedo} onClick={hist.redo}>↷</button>
         <button className="btn hide-phone" onClick={() => setDialog('import')}>貼上織圖</button>
@@ -319,7 +312,7 @@ export default function Editor({ partId }: { partId: string }) {
       </div>
 
       <div className="ed-body" data-tab={tab}>
-        <StitchPanel onStitch={insertStitch} onWrap={wrap} palette={part.palette} color={colorId} onColor={setColorId} tool={tool} onTool={(t) => { setTool(t); segAnchor.current = null; }} onEditPalette={() => setDialog('palette')} />
+        <StitchPanel onStitch={insertStitch} onCombo={setCombo} palette={part.palette} color={colorId} onColor={setColorId} tool={tool} onTool={(t) => { setTool(t); segAnchor.current = null; }} onEditPalette={() => setDialog('palette')} />
 
         <main className="ed-mid">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -397,6 +390,11 @@ export default function Editor({ partId }: { partId: string }) {
 
       {(dialog === 'settings' || dialog === 'palette') && (
         <PartSettingsDialog part={part} focus={dialog} usage={usage} onClose={() => setDialog(null)} onSave={(p) => { update(() => p); setDialog(null); }} />
+      )}
+      {combo && (
+        <ComboBuilder kind={combo} expected={analysis.rounds.find((x) => x.rowId === targetRow()?.id && x.inRow === 0)?.expected} rowLabel={(() => { const r = analysis.rows.find((x) => x.row.id === targetRow()?.id); return r ? (r.first === r.last ? `R${r.first}` : `R${r.first}–${r.last}`) : '這一圈'; })()}
+          onClose={() => setCombo(null)}
+          onInsert={(text) => { setCombo(null); insertText((before, _sel, after) => { const tok = joinToken(before, text); return { text: before + tok + after, caret: before.length + tok.length }; }); }} />
       )}
       {dialog === 'import' && (
         <ImportDialog onClose={() => setDialog(null)} onImport={(rows, replace) => { update((p) => ({ ...p, rows: replace ? rows : [...p.rows.filter((r) => r.text.trim() !== ''), ...rows] })); setDialog(null); }} />

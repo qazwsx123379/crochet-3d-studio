@@ -7,7 +7,7 @@ export type PaintTool = 'select' | 'stitch' | 'segment' | 'round';
 
 interface Props {
   onStitch: (code: string) => void;
-  onWrap: (kind: 'repeat' | 'same' | 'BLO' | 'FLO' | 'times') => void;
+  onCombo: (kind: 'repeat' | 'same' | 'loop') => void;
   palette: YarnColor[];
   color: string;
   onColor: (id: string) => void;
@@ -18,7 +18,7 @@ interface Props {
 
 const FIRST = 15;
 
-export default function StitchPanel({ onStitch, onWrap, palette, color, onColor, tool, onTool, onEditPalette }: Props) {
+export default function StitchPanel({ onStitch, onCombo, palette, color, onColor, tool, onTool, onEditPalette }: Props) {
   const order = useStore((s) => s.prefs.stitchOrder);
   const [more, setMore] = useState(false);
   const [drag, setDrag] = useState<string | null>(null);
@@ -71,12 +71,13 @@ export default function StitchPanel({ onStitch, onWrap, palette, color, onColor,
           <span>{more ? '收起' : `更多 ${order.length - FIRST} 種`}</span>
         </button>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button className="btn sm" onMouseDown={keep} onClick={() => onWrap('repeat')} title="把選取的針包成一組重複">( ) 重複</button>
-        <button className="btn sm" onMouseDown={keep} onClick={() => onWrap('times')} title="插入 *，後面接次數">× 次數</button>
-        <button className="btn sm" onMouseDown={keep} onClick={() => onWrap('same')} title="鉤在同一針裡">[ ] 同一針</button>
-        <button className="btn sm" onMouseDown={keep} onClick={() => onWrap('FLO')}>FLO 前半針</button>
-        <button className="btn sm" onMouseDown={keep} onClick={() => onWrap('BLO')}>BLO 後半針</button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span className="label">組合針法</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+          <button className="btn sm" style={{ height: 44, flexDirection: 'column', gap: 0, lineHeight: 1.2 }} onClick={() => onCombo('repeat')} title="例如：短針 1、加針 1，重複 6 次 → (X,V)*6"><b>重複一組</b><span className="muted" style={{ fontSize: 11 }}>(X,V)*6</span></button>
+          <button className="btn sm" style={{ height: 44, flexDirection: 'column', gap: 0, lineHeight: 1.2 }} onClick={() => onCombo('same')} title="例如：同一針裡鉤 3 長針 → [3F]"><b>同一針</b><span className="muted" style={{ fontSize: 11 }}>[3F]</span></button>
+          <button className="btn sm" style={{ height: 44, flexDirection: 'column', gap: 0, lineHeight: 1.2 }} onClick={() => onCombo('loop')} title="例如：只鉤後半針 30 針 → BLO(X*30)"><b>前／後半針</b><span className="muted" style={{ fontSize: 11 }}>BLO(X*30)</span></button>
+        </div>
       </div>
       <div style={{ height: 1, background: 'var(--line)', flex: 'none' }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

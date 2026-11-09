@@ -54,17 +54,30 @@ let state: State = load();
 const listeners = new Set<() => void>();
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saveOk = true;
+let saving = false;
+let savedAt = 0;
+let saveSnap = { state: 'saved' as 'saving' | 'saved' | 'failed', at: 0 };
 
 function writeNow() {
   clearTimeout(saveTimer);
   saveTimer = undefined;
   let ok = true;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { ok = false; /* storage full or blocked: keep working in memory */ }
-  if (ok !== saveOk) { saveOk = ok; listeners.forEach((l) => l()); }
+  saveOk = ok;
+  saving = false;
+  if (ok) savedAt = Date.now();
+  notifySave();
+}
+
+function notifySave() {
+  const state = !saveOk ? 'failed' : saving ? 'saving' : 'saved';
+  if (state !== saveSnap.state || savedAt !== saveSnap.at) { saveSnap = { state, at: savedAt }; listeners.forEach((l) => l()); }
 }
 
 function persist() {
   clearTimeout(saveTimer);
+  saving = true;
+  notifySave();
   saveTimer = setTimeout(writeNow, 300);
 }
 
@@ -74,9 +87,9 @@ if (typeof window !== 'undefined') {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && saveTimer) writeNow(); });
 }
 
-/** False after a save to this browser failed (for example, storage is full). */
-export function useSaveOk(): boolean {
-  return useSyncExternalStore(subscribe, () => saveOk);
+/** Whether the latest edit is saved in this browser, and when. */
+export function useSaveStatus() {
+  return useSyncExternalStore(subscribe, () => saveSnap);
 }
 
 function set(next: State) {
