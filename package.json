@@ -1,0 +1,38 @@
+{
+  "name": "crochet-3d-studio",
+  "version": "0.1.0",
+  "description": "鉤織 3D 工作室：寫織圖、即時 3D 預覽",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "build:preview": "vite build --mode preview && node scripts/make-artifact.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qazwsx123379/crochet-3d-studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/qazwsx123379/crochet-3d-studio/issues"
+  },
+  "homepage": "https://github.com/qazwsx123379/crochet-3d-studio#readme",
+  "dependencies": {
+    "@react-three/drei": "^9.114.0",
+    "@react-three/fiber": "^8.17.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.169.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vite-plugin-singlefile": "^2.0.3",
+    "vitest": "^2.1.4"
+  },
+  "private": true,
+  "type": "module"
+}
