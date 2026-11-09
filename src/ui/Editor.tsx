@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import type { Part } from '../types';
 import type { PatternRow, RoundInfo } from '../pattern/analyze';
 import { analyze } from '../pattern/analyze';
@@ -80,11 +80,14 @@ export default function Editor({ partId }: { partId: string }) {
 
   useEffect(() => { if (part && !part.palette.some((c) => c.id === colorId)) setColorId(part.palette[0]?.id ?? ''); }, [part, colorId]);
 
+  // The 3D rebuild runs in the gaps between keystrokes so typing never waits for it.
+  const lazyPart = useDeferredValue(part);
+  const lazyAnalysis = useDeferredValue(analysis);
   const shape = useMemo(() => {
-    if (!part || !analysis) return null;
-    const rounds = analysis.rounds.filter((r) => r.no <= shown && r.status !== 'syntax' && r.status !== 'empty').map((info) => ({ info, hexes: roundHexes(part, info) }));
-    return buildShape(rounds, { method: part.settings.method, start: part.settings.start, stuffed: prefs.stuffed });
-  }, [part, analysis, shown, prefs.stuffed]);
+    if (!lazyPart || !lazyAnalysis) return null;
+    const rounds = lazyAnalysis.rounds.filter((r) => r.no <= shown && r.status !== 'syntax' && r.status !== 'empty').map((info) => ({ info, hexes: roundHexes(lazyPart, info) }));
+    return buildShape(rounds, { method: lazyPart.settings.method, start: lazyPart.settings.start, stuffed: prefs.stuffed });
+  }, [lazyPart, lazyAnalysis, shown, prefs.stuffed]);
 
   // Round-by-round playback.
   useEffect(() => {
