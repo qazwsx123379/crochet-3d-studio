@@ -10,7 +10,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Part, Prefs, Work } from '../types';
 import { STITCHES } from '../pattern/stitches';
-import { SAMPLE_VERSION, collarParts, collarWorks, sampleParts, sampleWorks } from './samples';
+import { SAMPLE_VERSION, collarParts, collarWorks, sampleParts, sampleWorks, tartParts, tartWorks } from './samples';
 import { newId } from './yarns';
 import type { Account, Change, Kind } from './cloud';
 
@@ -227,8 +227,8 @@ function migrateSamples() {
   if ((state.prefs.sampleVersion ?? 1) >= SAMPLE_VERSION) return;
   const parts = { ...state.parts };
   const works = { ...state.works };
-  for (const p of collarParts()) if (!parts[p.id]) parts[p.id] = p;
-  for (const w of collarWorks()) if (!works[w.id]) works[w.id] = w;
+  for (const p of [...collarParts(), ...tartParts()]) if (!parts[p.id]) parts[p.id] = p;
+  for (const w of [...collarWorks(), ...tartWorks()]) if (!works[w.id]) works[w.id] = w;
   set({ parts, works, prefs: { ...state.prefs, sampleVersion: SAMPLE_VERSION } });
 }
 

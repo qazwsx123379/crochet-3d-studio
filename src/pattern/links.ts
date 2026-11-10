@@ -10,9 +10,11 @@ import type { Method, RoundInfo } from './analyze';
 export function stitchParents(rounds: RoundInfo[], method: Method): Map<number, number[][]> {
   const out = new Map<number, number[][]>();
   let prevSlots: number[] = []; // stitch indices of the round below, one per stitch it left
+  const slotsByNo = new Map<number, number[]>();
   for (const r of rounds) {
     if (!r.stitches.length || r.status === 'syntax') continue;
-    const below = method === 'flat' ? [...prevSlots].reverse() : prevSlots;
+    const under = r.base !== undefined ? slotsByNo.get(r.base) ?? prevSlots : prevSlots;
+    const below = method === 'flat' ? [...under].reverse() : under;
     let ptr = Math.max(0, (r.startAt ?? 1) - 1);
     const take = (n: number): number[] => {
       if (!below.length) return [];
@@ -38,7 +40,7 @@ export function stitchParents(rounds: RoundInfo[], method: Method): Map<number, 
     out.set(r.no, parents);
     const slots: number[] = [];
     r.stitches.forEach((st, i) => { for (let q = 0; q < (STITCH_BY_CODE[st.code]?.produces ?? 0); q++) slots.push(i); });
-    if (slots.length) prevSlots = slots;
+    if (slots.length) { prevSlots = slots; slotsByNo.set(r.no, slots); }
   }
   return out;
 }

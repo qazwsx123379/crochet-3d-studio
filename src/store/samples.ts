@@ -69,7 +69,7 @@ export function sampleParts(): Part[] {
     rows: rows('sole', [['ch10', 1, '起針 10 個鎖針，兩側往返鉤'], ['X*20'], ['(V,X*8,V)*2'], ['(X,V,X*8,V,X)*2'], ['BLO(X*28)', 1, '只鉤後半針，鞋底轉角'], ['X*28', 3]]),
     roundColors: {},
   };
-  return [head, stem, hat, coaster, swatch, sole, ...collarParts()];
+  return [head, stem, hat, coaster, swatch, sole, ...collarParts(), ...tartParts()];
 }
 
 /** Colour chosen stitches of one round. */
@@ -158,14 +158,74 @@ export function sampleWorks(): Work[] {
     { id: 'sample-work-pumpkin', name: '萬聖節南瓜', partIds: ['sample-head', 'sample-stem', 'sample-hat'], tags: ['萬聖節'], updatedAt: 0, sample: true },
     { id: 'sample-work-small', name: '小物練習', partIds: ['sample-coaster', 'sample-swatch', 'sample-sole'], tags: ['杯墊', '片織'], updatedAt: 0, sample: true },
     ...collarWorks(),
+    ...tartWorks(),
   ];
 }
 
 /** Sample ids added after the first release, given once to accounts that already exist. */
-export const SAMPLE_VERSION = 2;
+export const SAMPLE_VERSION = 3;
 export function collarWorks(): Work[] {
   return [
     { id: 'sample-work-burger', name: '漢堡圍脖', partIds: ['sample-burger-base', 'sample-burger-lettuce', 'sample-burger-cheese', 'sample-burger-ketchup', 'sample-burger-tomato', 'sample-burger-tie'], tags: ['寵物圍脖'], updatedAt: 0, sample: true },
     { id: 'sample-work-cake', name: '草莓蛋糕圍脖', partIds: ['sample-cake', 'sample-cherry'], tags: ['寵物圍脖'], updatedAt: 0, sample: true },
   ];
+}
+
+/**
+ * 草莓奶油塔, typed the way the original chart writes it (外钩2F, 正常钩F,
+ * 钩5个未完成F, 钩R2的内半针, 倒2钩2X, 3CH 起立…).
+ */
+export function tartParts(): Part[] {
+  const su = (id: string, name: string, hex: string, code: string): YarnColor => ({ id, name, hex, brand: '蘇蘇姐家 4 股唯棉', code });
+  const white = su('w', '乳白色', '#F6F1E6', '06');
+  const brown = su('b', '淺棕色', '#C48A4A', '23');
+  const green = su('g', '艾綠色', '#6E8F3A', '37');
+  const red = su('r', '紅色', '#D3232B', '51');
+  const ring = { method: 'spiral' as const, start: 'ring' as const, yarn: '唯棉', hook: 2 };
+  const top: Part = {
+    ...base, id: 'sample-tart-top', name: '奶油塔・白色撻面', tags: ['草莓奶油塔'], settings: ring, palette: [white],
+    rows: [
+      ...rows('tart-top', [['环起10T'], ['10TV'], ['10(T, TV)'], ['10(T, TV, T)'], ['翻转织片钩内半针 13(SL, 3CH, 钩5个未完成F, k)', 1, '奶油花：翻面鉤 R4 的內半針']]),
+      { id: 'tart-top-r6', text: '9(V, 3X), 2(V, X)', repeat: 1, note: '鉤在 R4 留下的外半針上', base: 4 },
+    ],
+    roundColors: {},
+  };
+  const crust: Part = {
+    ...base, id: 'sample-tart-crust', name: '奶油塔・蛋撻皮', tags: ['草莓奶油塔'], settings: ring, palette: [brown],
+    rows: rows('tart-crust', [
+      ['环起10X'], ['10V'], ['20X'], ['10(X, V)'], ['30X'], ['10(2X, V)'],
+      ['钩内半针9(FV, 3F), 2(FV, F)', 1, '只鉤內半針，撻皮立起來'],
+      ['17(外钩2F, 正常钩F)', 1, '留長線斷線，挑外半針和撻面縫合'],
+      ['3CH, 17(外钩2F, 正常钩F)', 1, '塞棉縫合後重新取線'],
+      ['17(外钩FV, 外钩F, 正常SL)', 1, '花邊'],
+    ]),
+    roundColors: {},
+  };
+  const matcha: Part = {
+    ...base, id: 'sample-tart-matcha', name: '奶油塔・抹茶奶油', tags: ['草莓奶油塔'],
+    settings: { method: 'flat', start: 'chain', yarn: '唯棉', hook: 2, roll: true }, palette: [green],
+    rows: rows('tart-matcha', [['起111CH'], ['钩里山110X'], ['钩R2的内半针 110X'], ['钩R2的外半针 110X', 1, '鉤完捲起來']]),
+    roundColors: {},
+  };
+  const big: Part = {
+    ...base, id: 'sample-tart-big', name: '奶油塔・大草莓', tags: ['草莓奶油塔'], settings: ring, palette: [red],
+    rows: rows('tart-big', [['环起6X'], ['3(X, V)'], ['3(X, V, X)'], ['3(3X, V)'], ['3(2X, V, 2X)'], ['3(5X, V)'], ['7(X, A)'], ['7A', 1, '草莓點點取乳白色線縫上去']]),
+    roundColors: {},
+  };
+  const small: Part = {
+    ...base, id: 'sample-tart-small', name: '奶油塔・小草莓', tags: ['草莓奶油塔'], settings: ring, palette: [red],
+    rows: rows('tart-small', [['环起6X'], ['3(X, V)'], ['3(X, V, X)'], ['3(3X, V)'], ['15X'], ['5(X, A)', 1, '留線，挑外半針塞棉縫合；做 5 個，不鉤蒂']]),
+    roundColors: {},
+  };
+  const calyx: Part = {
+    ...base, id: 'sample-tart-calyx', name: '奶油塔・草莓蒂', tags: ['草莓奶油塔'],
+    settings: { method: 'joined', start: 'ring', yarn: '唯棉', hook: 2 }, palette: [green],
+    rows: rows('tart-calyx', [['环起钩5(3CH, 倒2钩2X, SL)', 1, '縫在大草莓頂端']]),
+    roundColors: {},
+  };
+  return [top, crust, matcha, big, small, calyx];
+}
+
+export function tartWorks(): Work[] {
+  return [{ id: 'sample-work-tart', name: '草莓奶油塔', partIds: ['sample-tart-crust', 'sample-tart-top', 'sample-tart-small', 'sample-tart-matcha', 'sample-tart-big', 'sample-tart-calyx'], tags: ['草莓奶油塔'], updatedAt: 0, sample: true }];
 }

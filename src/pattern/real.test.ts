@@ -47,13 +47,14 @@ describe('patterns copied from Chinese social posts', () => {
   });
 });
 
-import { collarParts } from '../store/samples';
+import { collarParts, tartParts } from '../store/samples';
 describe('collar samples', () => {
-  for (const p of collarParts()) {
+  for (const p of [...collarParts(), ...tartParts()]) {
     it(`${p.name} has no counting problems`, () => {
       const a = analyze(p.rows, p.settings);
       const bad = a.rounds.filter((r) => r.status === 'syntax' || r.status === 'short' || r.status === 'over').map((r) => `R${r.no}: ${r.message}`);
-      expect(bad).toEqual([]);
+      // The original tart chart's R5 (13 × 3 = 39 on 40 stitches) really is one short.
+      expect(bad).toEqual(p.id === 'sample-tart-top' ? ['R5: 上一圈 40 針，這圈只用掉 39 針，還差 1 針'] : []);
     });
   }
 });

@@ -18,6 +18,8 @@ export interface PartSettings {
   hook: number;
   /** Show the part upside down (a hat starts at its tip). */
   flip?: boolean;
+  /** A flat strip that is rolled up after crocheting (rose, cream ruffle). */
+  roll?: boolean;
 }
 
 export interface Part {

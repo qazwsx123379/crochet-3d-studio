@@ -86,7 +86,7 @@ function render(part: Part): string {
   const rounds = a.rounds.filter((r) => r.stitches.length && r.status !== 'syntax' && r.status !== 'empty').map((info) => ({ info, hexes: roundHexes(part, info) }));
   const total = rounds.reduce((n, r) => n + r.info.stitches.length, 0);
   const yarn = total <= 3000;
-  const data = prepareRender(rounds, { method: part.settings.method, start: part.settings.start, stuffed: true }, yarn);
+  const data = prepareRender(rounds, { method: part.settings.method, start: part.settings.start, stuffed: true, roll: !!part.settings.roll }, yarn);
   if (!data) return '';
   const group = buildGroup(data, yarn, c.material);
   if (part.settings.flip) { group.rotation.x = Math.PI; group.position.y = data.center[1] * 2; }

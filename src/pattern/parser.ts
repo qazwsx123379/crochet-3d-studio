@@ -37,6 +37,8 @@ export interface ParsedRound {
   errors: ParseError[];
   /** A `*到底` repeat: how many times it fitted, and how many stitches one repeat uses. */
   auto?: { times: number; unit: number };
+  /** 「鉤R2的內半針」: the round this one is worked into, when not the one just before. */
+  base?: number;
 }
 
 type Node =
@@ -54,13 +56,23 @@ type Token =
   | { t: 'mod'; v: ModifierCode; at: number }
   | { t: 'ring'; at: number }
   | { t: 'auto'; at: number }
+  | { t: 'back'; at: number }
+  | { t: 'base'; v: number; at: number }
   | { t: '(' | ')' | '[' | ']' | '{' | '}' | '*'; at: number };
 
 const RING_WORDS = ['魔術環', '環形起針', '环形起针', '魔术环', '環起', '环起', 'MR'];
 const AUTO_WORDS = ['重複到底', '重复到底', '到底', '到尾', '~', '～'];
 const CN_NUM: Record<string, number> = { 一: 1, 二: 2, 兩: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
 /** 「3個未完成中長針」 is one puff/bobble stitch, not three stitches. */
-const UNFINISHED = /^([0-9０-９]+|[一二兩两三四五六七八九十])?\s*[個个]?\s*未完成的?(短針|短针|中長針|中长针|長長針|长长针|長針|长针)/;
+const UNFINISHED = /^([0-9０-９]+|[一二兩两三四五六七八九十])?\s*[個个]?\s*未完成的?(短針|短针|中長針|中长针|長長針|长长针|長針|长针|[XxTtFfEe](?![VvAaPp]))/;
+/** 「外鉤2F」「內鉤FV」: post stitches around the stitch below. */
+const POST = /^(外|內|内)[鉤钩]\s*([0-9０-９]+)?\s*(FV|fv|F|f|長針|长针)(?![VvAa])/;
+/** 「倒2鉤2X」: the next stitches go back along the chain just made, not into the round below. */
+const BACK = /^倒(?:數|数)?第?\s*[0-9０-９一二三四五]\s*[針针]?\s*[鉤钩]/;
+/** 「鉤R2的內半針」「在第4圈」: work into an earlier round. */
+const BASE = /^(?:[鉤钩在]\s*)?(?:R|第)\s*([0-9０-９]+)\s*(?:圈|排|行)?\s*的?/;
+/** Words that only say "crochet" or describe handling, not stitches. */
+const FILLER = ['正常鉤', '正常钩', '翻轉織片', '翻转织片', '翻面', '裏山', '里山', '起針', '起针', '正常', '鉤', '钩', '起', '在'];
 /** 「起立2ch」「立起3鎖針」: turning chains that don't count as stitches. */
 const TURNING = /^(?:起立|立起)(?:針|针)?\s*([0-9０-９]+)?\s*(?:個|个)?\s*(?:ch|CH|Ch|鎖針|锁针|鎖|锁)?/;
 const SEPARATORS = new Set([' ', '\t', ',', '，', '、', '；', ';', '　']);
@@ -87,11 +99,27 @@ export function tokenize(src: string): Token[] {
     if (un) {
       const n = un[1] ? (CN_NUM[un[1]] ?? parseInt(toAscii(un[1]), 10)) : 3;
       const kind = un[2];
-      const code = /中/.test(kind) ? 'Q' : /短/.test(kind) ? 'B' : n >= 5 ? 'P' : 'B';
+      const code = /中|^[Tt]$/.test(kind) ? 'Q' : /短|^[Xx]$/.test(kind) ? 'B' : n >= 5 ? 'P' : 'B';
       out.push({ t: 'stitch', v: code, at: i, end: i + un[0].length });
       i += un[0].length;
       continue;
     }
+    const po = rest.match(POST);
+    if (po) {
+      const code = po[1] === '外' ? 'FP' : 'BP';
+      const end = i + po[0].length;
+      if (po[2]) out.push({ t: 'num', v: parseInt(toAscii(po[2]), 10), at: i });
+      if (/V|v/.test(po[3])) {
+        // A post increase: two post stitches around the same stitch.
+        out.push({ t: '[', at: i }, { t: 'stitch', v: code, at: i, end }, { t: 'stitch', v: code, at: i, end }, { t: ']', at: i });
+      } else out.push({ t: 'stitch', v: code, at: i, end });
+      i = end;
+      continue;
+    }
+    const bk = rest.match(BACK);
+    if (bk) { out.push({ t: 'back', at: i }); i += bk[0].length; continue; }
+    const bs = rest.match(BASE);
+    if (bs && (out.length === 0 || /[鉤钩在第]/.test(bs[0]))) { out.push({ t: 'base', v: parseInt(toAscii(bs[1]), 10), at: i }); i += bs[0].length; continue; }
     const tu = rest.match(TURNING);
     if (tu) {
       if (tu[1]) out.push({ t: 'num', v: parseInt(toAscii(tu[1]), 10), at: i });
@@ -111,6 +139,9 @@ export function tokenize(src: string): Token[] {
     for (const w of RING_WORDS) {
       if (src.startsWith(w, i)) { out.push({ t: 'ring', at: i }); i += w.length; continue outer; }
     }
+    for (const w of FILLER) {
+      if (src.startsWith(w, i)) { i += w.length; continue outer; }
+    }
     // Modifiers and stitches share the alphabet; try the longest word of either kind.
     const mod = MODIFIER_WORDS.find((m) => src.startsWith(m.word, i));
     const st = STITCH_WORDS.find((s) => src.startsWith(s.word, i));
@@ -129,7 +160,10 @@ class Parser {
   private peek(): Token | undefined { return this.toks[this.p]; }
   private at(): number { return this.peek()?.at ?? this.srcLen; }
 
+  base?: number;
   parse(): Node {
+    // 「鉤R2的…」 can come anywhere before the stitches; take it out first.
+    this.toks = this.toks.filter((t) => { if (t.t === 'base') { this.base = t.v; return false; } return true; });
     while (this.peek()?.t === 'ring') { this.magicRing = true; this.p++; }
     const seq = this.seq();
     const extra = this.peek();
@@ -147,6 +181,12 @@ class Parser {
   }
 
   private item(): Node {
+    if (this.peek()?.t === 'back') {
+      // 倒2鉤2X: these stitches are worked along the chain, using nothing below.
+      this.p++;
+      if (!this.peek()) throw new PatternSyntaxError('「倒…鉤」後面要接針法', this.srcLen);
+      return { type: 'space', node: this.item() };
+    }
     let prefix: number | undefined;
     const tk = this.peek()!;
     if (tk.t === 'num') {
@@ -286,11 +326,11 @@ export function parseRound(src: string, available?: number): ParsedRound {
       if (unit <= 0) throw new PatternSyntaxError('「到底」要重複的針法至少要用掉 1 針', 0);
       const times = available === undefined ? 1 : Math.max(0, Math.floor((available - base.consumed) / unit));
       const c = expand(ast, stitches, undefined, { nextGroup: { v: 0 }, autoTimes: times });
-      return { stitches, consumed: c.consumed, produced: c.produced, magicRing: parser.magicRing, errors: [], auto: { times, unit } };
+      return { stitches, consumed: c.consumed, produced: c.produced, magicRing: parser.magicRing, errors: [], auto: { times, unit }, ...(parser.base ? { base: parser.base } : {}) };
     }
     stitches = [];
     const c = expand(ast, stitches, undefined, { nextGroup: { v: 0 }, autoTimes: 0 });
-    return { stitches, consumed: c.consumed, produced: c.produced, magicRing: parser.magicRing, errors: [] };
+    return { stitches, consumed: c.consumed, produced: c.produced, magicRing: parser.magicRing, errors: [], ...(parser.base ? { base: parser.base } : {}) };
   } catch (e) {
     if (e instanceof PatternSyntaxError) return { ...empty, errors: [{ message: e.message, at: e.at }] };
     throw e;

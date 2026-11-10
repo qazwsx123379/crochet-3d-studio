@@ -26,6 +26,8 @@ export interface ShapeOptions {
   method: Method;
   start: StartKind;
   stuffed: boolean;
+  /** Roll a flat strip up into a coil (a rose, a ruffle of cream). */
+  roll?: boolean;
 }
 
 export interface ProfilePoint {

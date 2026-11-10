@@ -103,7 +103,7 @@ export default function Editor({ partId }: { partId: string }) {
   const shape = useMemo(() => {
     if (!lazyPart || !lazyAnalysis) return null;
     const rounds = lazyAnalysis.rounds.filter((r) => r.no <= shown && r.status !== 'syntax' && r.status !== 'empty').map((info) => ({ info, hexes: roundHexes(lazyPart, info) }));
-    return prepareRender(rounds, { method: lazyPart.settings.method, start: lazyPart.settings.start, stuffed: prefs.stuffed }, useYarn);
+    return prepareRender(rounds, { method: lazyPart.settings.method, start: lazyPart.settings.start, stuffed: prefs.stuffed, roll: !!lazyPart.settings.roll }, useYarn);
   }, [lazyPart, lazyAnalysis, shown, prefs.stuffed, useYarn]);
 
   // Round-by-round playback.

@@ -63,6 +63,7 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
   }
 
   let prevSlots: number[] = [];
+  const slotsByNo = new Map<number, number[]>();
   for (const r of usable) {
     const ids: number[] = [];
     const slots: number[] = [];
@@ -71,7 +72,9 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
     let lastGroup: number | undefined;
     let groupParents: number[] = [];
     // A flat row turns and works back along the row below, from its far end.
-    const below = flat ? [...prevSlots].reverse() : prevSlots;
+    // 「鉤R2的外半針」 goes back into an earlier round.
+    const under = r.info.base !== undefined ? slotsByNo.get(r.info.base) ?? prevSlots : prevSlots;
+    const below = flat ? [...under].reverse() : under;
     const take = (n: number): number[] => {
       if (!below.length) return ringStart && centerId >= 0 && !byRound.size ? [centerId] : [];
       const out: number[] = [];
@@ -101,7 +104,7 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
       for (let q = 0; q < def.produces; q++) slots.push(id);
     });
     if (ids.length) byRound.set(r.info.no, ids);
-    if (slots.length) prevSlots = slots;
+    if (slots.length) { prevSlots = slots; slotsByNo.set(r.info.no, slots); }
   }
   if (!byRound.size) return null;
 
@@ -287,7 +290,9 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
   for (let r = 0; r < roundLists.length; r++) {
     const ids = roundLists[r];
     const n = ids.length;
-    const below = r > 0 ? roundLists[r - 1] : null;
+    const thisNo = nodes[roundLists[r][0]].roundNo;
+    const baseNo = usable.find((u) => u.info.no === thisNo)?.info.base;
+    const below = r > 0 ? (baseNo !== undefined && byRound.get(baseNo)) || roundLists[r - 1] : null;
     for (let k = 0; k < n; k++) {
       const a = ids[k], b = ids[(k + 1) % n];
       if (k === n - 1 && (n < 3 || flat)) break;

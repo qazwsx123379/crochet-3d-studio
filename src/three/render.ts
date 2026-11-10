@@ -102,10 +102,109 @@ function bobbleBall(rounds: ShapeRound[], yarn: boolean): RenderData | null {
   };
 }
 
+/**
+ * Roll a flat strip into a coil around the vertical axis, starting from the
+ * end where the first row began: rows stay upright, the strip winds outwards
+ * in an Archimedean spiral about one stitch thick per turn.
+ */
+function rollUp(d: RenderData): RenderData {
+  let minX = Infinity;
+  for (let i = 0; i < d.positions.length; i += 3) minX = Math.min(minX, d.positions[i]);
+  const R0 = 1.4, b = 1.3 / (Math.PI * 2);
+  const theta = (s: number) => (-R0 + Math.sqrt(R0 * R0 + 2 * b * Math.max(0, s))) / b;
+  const pt = (x: number, y: number, z: number): V3 => {
+    const t = theta(x - minX);
+    const r = R0 + b * t + z;
+    return [r * Math.cos(t), y, r * Math.sin(t)];
+  };
+  const vec = (x: number, v: V3): V3 => {
+    const t = theta(x - minX), c = Math.cos(t), sn = Math.sin(t);
+    return [-sn * v[0] + c * v[2], v[1], c * v[0] + sn * v[2]];
+  };
+  const positions = new Float32Array(d.positions.length);
+  for (let i = 0; i < d.positions.length; i += 3) {
+    const p = pt(d.positions[i], d.positions[i + 1], d.positions[i + 2]);
+    positions[i] = p[0]; positions[i + 1] = p[1]; positions[i + 2] = p[2];
+  }
+  const placements = d.placements.map((p) => ({ ...p, pos: pt(...p.pos), tangent: vec(p.pos[0], p.tangent), up: vec(p.pos[0], p.up), normal: vec(p.pos[0], p.normal) }));
+  const rings = new Map([...d.rings].map(([k, pts]) => [k, pts.map((q) => pt(...q))]));
+  let min: V3 = [Infinity, Infinity, Infinity], max: V3 = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < positions.length; i += 3) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], positions[i + k]); max[k] = Math.max(max[k], positions[i + k]); }
+  const center: V3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+  const radius = Math.max(1, Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2);
+  return { ...d, positions, normals: undefined, placements, rings, center, radius, minY: min[1], maxY: max[1], doubleSided: true };
+}
+
+/**
+ * 「環起鉤 5(3CH, 倒2鉤2X, SL)」: one round of chains with stitches worked back
+ * along them makes little leaves around the ring (a strawberry's calyx, a
+ * star), not a round of fabric.
+ */
+function leafStar(rounds: ShapeRound[], yarn: boolean): RenderData | null {
+  if (rounds.length !== 1) return null;
+  const r = rounds[0];
+  const st = r.info.stitches;
+  if (!st.some((x) => x.free)) return null;
+  // A leaf ends at each slip stitch (or wherever the next chain run starts).
+  const leaves: number[][] = [];
+  let cur: number[] = [];
+  st.forEach((x, i) => {
+    if (x.code === 'ch' && cur.length && st[i - 1]?.code !== 'ch') { leaves.push(cur); cur = []; }
+    cur.push(i);
+    if (x.code === 'sl') { leaves.push(cur); cur = []; }
+  });
+  if (cur.length) leaves.push(cur);
+  const K = leaves.length;
+  if (K < 2) return null;
+  const placements: Placement[] = [];
+  const pos: number[] = [], col: number[] = [], idx: number[] = [], fr: number[] = [], fs: number[] = [];
+  const hexOf = (i: number) => r.hexes[i] ?? r.hexes[0] ?? '#5a8a3a';
+  const lin = (hex: string) => { const n = parseInt(hex.slice(1), 16); const f = (c: number) => { const v = c / 255; return (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4) * (yarn ? 0.55 : 1); }; return [f((n >> 16) & 255), f((n >> 8) & 255), f(n & 255)]; };
+  const R0 = 0.55;
+  // Centre of the ring.
+  pos.push(0, 0.05, 0); col.push(...lin(hexOf(0)));
+  leaves.forEach((leaf, k) => {
+    const a = (k / K) * Math.PI * 2;
+    const out: V3 = [Math.cos(a), 0, Math.sin(a)], side: V3 = [-Math.sin(a), 0, Math.cos(a)];
+    const chains = leaf.filter((i) => st[i].code === 'ch').length || 1;
+    const len = 0.6 * chains + 0.3;
+    leaf.forEach((i, q) => {
+      const s = st[i];
+      // Chains run out along the leaf; the stitches worked back come in beside them.
+      const along = s.code === 'ch' ? R0 + (q + 0.5) * (len / chains) : s.free ? R0 + len * (1 - (q - chains + 0.5) / Math.max(1, leaf.length - chains)) : R0;
+      const off = s.free ? 0.22 : s.code === 'ch' ? -0.12 : 0;
+      placements.push({
+        pos: [out[0] * along + side[0] * off, 0.12, out[2] * along + side[2] * off], tangent: side, up: out, normal: [0, 1, 0],
+        width: s.code === 'ch' ? 0.55 : 0.75, height: s.code === 'ch' ? 0.55 : 0.8, hex: hexOf(i), shape: s.code === 'ch' ? 'chain' : s.code === 'sl' ? 'slip' : 'post', roundNo: r.info.no, index: i,
+      });
+    });
+    // Fill: a pointed leaf from the ring out to the tip.
+    const base = pos.length / 3;
+    const tip = R0 + len + 0.15, w = 0.42;
+    const pts: V3[] = [[out[0] * R0 - side[0] * w, 0.04, out[2] * R0 - side[2] * w], [out[0] * tip, 0.08, out[2] * tip], [out[0] * R0 + side[0] * w, 0.04, out[2] * R0 + side[2] * w], [out[0] * (R0 + len * 0.5) + side[0] * w * 0.8, 0.07, out[2] * (R0 + len * 0.5) + side[2] * w * 0.8], [out[0] * (R0 + len * 0.5) - side[0] * w * 0.8, 0.07, out[2] * (R0 + len * 0.5) - side[2] * w * 0.8]];
+    for (const p of pts) { pos.push(...p); col.push(...lin(hexOf(leaf[0]))); }
+    // centre fan + leaf body
+    idx.push(0, base + 2, base, base, base + 4, base + 1, base + 4, base + 3, base + 1, base + 2, base + 3, base + 4, base + 4, base, base + 2);
+    for (let t = 0; t < 5; t++) { fr.push(r.info.no); fs.push(leaf[0]); }
+  });
+  const ringPts: V3[] = Array.from({ length: K + 1 }, (_, k) => [Math.cos((k / K) * Math.PI * 2) * R0, 0.1, Math.sin((k / K) * Math.PI * 2) * R0]);
+  const ext = R0 + 0.6 * 3 + 0.5;
+  return {
+    positions: new Float32Array(pos), colors: new Float32Array(col), index: new Uint32Array(idx), faceRound: new Int32Array(fr), faceStitch: new Int32Array(fs),
+    placements: [...placements, ...placements.map((p) => ({ ...p, normal: neg(p.normal), tangent: neg(p.tangent) }))],
+    rings: new Map([[r.info.no, ringPts]]), center: [0, 0.1, 0], radius: ext, minY: 0, maxY: 0.3, doubleSided: true,
+  };
+}
+
 /** `yarn` darkens the fill so it reads as the shadow between stitches. */
 export function prepareRender(rounds: ShapeRound[], opts: ShapeOptions, yarn: boolean): RenderData | null {
+  const d = prepareFlatOrRound(rounds, opts, yarn);
+  return d && opts.roll && opts.method === 'flat' && d.index ? rollUp(d) : d;
+}
+
+function prepareFlatOrRound(rounds: ShapeRound[], opts: ShapeOptions, yarn: boolean): RenderData | null {
   if (opts.start === 'ring' && opts.method !== 'flat') {
-    const ball = bobbleBall(rounds, yarn);
+    const ball = bobbleBall(rounds, yarn) ?? leafStar(rounds, yarn);
     if (ball) return ball;
   }
   const base = buildShape(rounds, opts);

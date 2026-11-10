@@ -24,7 +24,7 @@ export function partData(part: Part, yarn: boolean): RenderData | null {
   const a = analyze(part.rows, part.settings);
   const rounds = a.rounds.filter((r) => r.stitches.length && r.status !== 'syntax' && r.status !== 'empty').map((info) => ({ info, hexes: roundHexes(part, info) }));
   let data: RenderData | null = null;
-  try { data = prepareRender(rounds, { method: part.settings.method, start: part.settings.start, stuffed: true }, yarn); } catch (e) { console.error(e); }
+  try { data = prepareRender(rounds, { method: part.settings.method, start: part.settings.start, stuffed: true, roll: !!part.settings.roll }, yarn); } catch (e) { console.error(e); }
   if (cache.size > 80) cache.clear();
   cache.set(key, data);
   return data;
@@ -212,6 +212,38 @@ const PRESETS: Record<string, (parts: Record<string, Part>, yarn: boolean, item:
     const base = item(cake.id, [0, 0, 0], [-90, 0, 0]);
     const cherries = spreadAlong(cherry, rd, 0.9, { part: cake, data: cd, item: base }, 5, 16);
     return [base, ...cherries];
+  },
+  'sample-work-tart': (parts, yarn, item) => {
+    const ids = ['sample-tart-crust', 'sample-tart-top', 'sample-tart-small', 'sample-tart-matcha', 'sample-tart-big', 'sample-tart-calyx'] as const;
+    if (ids.some((id) => !parts[id])) return null;
+    const [crust, top, small, matcha, big, calyx] = ids.map((id) => parts[id]);
+    const [cd, td, sd, md, bd, kd] = [crust, top, small, matcha, big, calyx].map((p) => partData(p, yarn));
+    if (!cd || !td || !sd || !md || !bd || !kd) return null;
+    const h = (d: RenderData) => d.maxY - d.minY;
+    // The crust is the cup; the white top is sewn to its R8, a little below the rim.
+    const out: WorkItem[] = [item(crust.id, [0, 0, 0])];
+    const r8 = roundFrame(cd, 8);
+    const r9 = roundFrame(cd, 9);
+    // The cream fills the cup up to about the rim (R9), as in the photo.
+    const seam = r9 ? r9.center.y - cd.minY - 0.6 : r8 ? r8.center.y - cd.minY : h(cd) * 0.7;
+    // Sewn inside the wall, so a touch smaller than the round it is sewn to.
+    const topScale = r8 ? Math.min(1, (r8.radius * 0.9) / Math.max(1, roundFrame(td, Math.max(...td.rings.keys()))?.radius ?? r8.radius)) : 0.9;
+    const topItem = item(top.id, [0, seam + 0.3, 0], [0, 0, 0], topScale);
+    out.push(topItem);
+    const surface = seam + 0.3 + h(td) * topScale;
+    // Five small strawberries in a ring on the cream, opening down.
+    const ringR = r8 ? r8.radius * 0.55 : 4;
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2 + 0.3;
+      out.push(item(small.id, [Math.cos(a) * ringR, surface + h(sd) * 0.95, Math.sin(a) * ringR], [180, 0, 0], 0.9));
+    }
+    // The matcha cream rolled up in the middle, the big strawberry and its calyx on top.
+    const mScale = Math.min(1, ((r8 ? r8.radius : 6) * 1.05) / Math.max(1, md.radius));
+    out.push(item(matcha.id, [0, surface + h(sd) * 0.3, 0], [0, 0, 0], mScale));
+    const mTop = surface + h(sd) * 0.3 + h(md) * mScale;
+    out.push(item(big.id, [0, mTop - 0.8, 0]));
+    out.push(item(calyx.id, [0, mTop - 0.8 + h(bd) - 0.15, 0], [0, 0, 0], 0.9));
+    return out;
   },
   'sample-work-burger': (parts, yarn, item) => {
     const ids = ['sample-burger-base', 'sample-burger-ketchup', 'sample-burger-lettuce', 'sample-burger-cheese', 'sample-burger-tomato', 'sample-burger-tie'];

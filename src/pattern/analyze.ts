@@ -24,6 +24,8 @@ export interface PatternRow {
    * before it unworked. Applies to the row's first round.
    */
   startAt?: number;
+  /** Round this row is worked into, when not the one just before (「鉤R2的外半針」). */
+  base?: number;
 }
 
 export type RoundStatus = 'ok' | 'empty' | 'syntax' | 'short' | 'over' | 'start';
@@ -47,6 +49,8 @@ export interface RoundInfo {
   startAt?: number;
   /** Most stitches are worked in the back or front loop only. */
   loopOnly?: 'BLO' | 'FLO';
+  /** Worked into this earlier round instead of the one just before. */
+  base?: number;
 }
 
 export interface RowInfo {
@@ -80,6 +84,7 @@ export function analyze(rows: PatternRow[], settings: PartSettingsLike): Analysi
   const rounds: RoundInfo[] = [];
   const rowInfos: RowInfo[] = [];
   let prevProduced: number | undefined;
+  const producedByNo = new Map<number, number>();
   let no = 1;
   let problems = 0;
 
@@ -94,12 +99,26 @@ export function analyze(rows: PatternRow[], settings: PartSettingsLike): Analysi
     let rowMsg = '';
 
     for (let k = 0; k < repeat; k++) {
+      // 「鉤R2的外半針」: this round goes back into an earlier round (only its first copy).
+      const wantBase = k === 0 ? row.base ?? plain.base : undefined;
+      const base = wantBase && wantBase < no && producedByNo.has(wantBase) ? wantBase : undefined;
+      if (base !== undefined) prevProduced = producedByNo.get(base);
       const startHere = k === 0 && row.startAt && row.startAt > 1 && prevProduced !== undefined ? Math.min(row.startAt, prevProduced) : 1;
       if (hasAuto) parsed = parseRound(row.text, prevProduced === undefined ? undefined : prevProduced - (settings.method === 'flat' ? startHere - 1 : 0));
       const info: RoundInfo = {
         no, rowId: row.id, inRow: k, stitches: parsed.stitches, consumed: parsed.consumed, produced: parsed.produced,
-        expected: prevProduced, status: 'ok', message: '', loopOnly: loopOnly(parsed.stitches),
+        expected: prevProduced, status: 'ok', message: '', loopOnly: loopOnly(parsed.stitches), ...(base ? { base } : {}),
       };
+      // 「3CH, 17(…)」: chains at the start of a round raise the hook to height (起立) and don't count.
+      let lead = 0;
+      if (prevProduced !== undefined && !parsed.errors.length && /^\s*\d*\s*(?:ch|CH|Ch|鎖針|锁针)\s*\d*\s*[,，、\s]/.test(row.text)) {
+        while (lead < info.stitches.length && info.stitches[lead].code === 'ch' && info.stitches[lead].group === undefined && !info.stitches[lead].free) lead++;
+        const next = info.stitches[lead];
+        if (lead >= 1 && lead <= 4 && next && next.code !== 'ch' && next.code !== 'sk') {
+          info.stitches = info.stitches.map((st, i) => (i < lead ? { ...st, code: 'tch' } : st));
+          info.produced -= lead;
+        } else lead = 0;
+      }
       const isFirst = prevProduced === undefined;
       if (parsed.errors.length) {
         info.status = 'syntax';
@@ -144,10 +163,12 @@ export function analyze(rows: PatternRow[], settings: PartSettingsLike): Analysi
         } else if (parsed.auto) info.message = `${where}重複 ${parsed.auto.times} 次，剛好用完`;
         else if (start > 1) info.message = `${where}剛好用完`;
       }
+      if (base && info.status !== 'syntax' && info.status !== 'empty') info.message = `鉤在 R${base} 上${info.message ? '，' + info.message : ''}`;
+      if (lead && info.status !== 'syntax') info.message = `開頭 ${lead} 鎖針當起立針${info.message ? '，' + info.message : ''}`;
       if (k === 0) { rowStatus = info.status; rowMsg = info.message; }
       if (info.status === 'syntax' || info.status === 'short' || info.status === 'over') problems++;
       rounds.push(info);
-      if (info.status !== 'empty' && info.status !== 'syntax') prevProduced = info.produced;
+      if (info.status !== 'empty' && info.status !== 'syntax') { prevProduced = info.produced; producedByNo.set(info.no, info.produced); }
       no++;
     }
     rowInfos.push({ row, first, last: no - 1, parsed, status: rowStatus, message: rowMsg, produced: rounds[rounds.length - 1].produced });

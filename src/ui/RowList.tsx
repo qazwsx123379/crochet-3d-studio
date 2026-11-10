@@ -83,9 +83,9 @@ export default function RowList(p: Props) {
             <div key={row.id} className={`row${isActive ? ' active' : ''}${bad ? ' bad' : ''}`}>
               <div className="row-no">
                 <span>{label}</span>
-                <button className={`start-chip${(row.startAt ?? 1) > 1 ? ' on' : ''}`} title="這一圈從上一圈的第幾針開始鉤" aria-label={`${label} 設定起點`}
+                <button className={`start-chip${(row.startAt ?? 1) > 1 || row.base ? ' on' : ''}`} title="這一圈從哪裡開始鉤、鉤在哪一圈上" aria-label={`${label} 設定起點`}
                   onClick={() => setStarts((s) => { const n = new Set(s); if (n.has(row.id) && (row.startAt ?? 1) <= 1) n.delete(row.id); else n.add(row.id); return n; })}>
-                  起點 {row.startAt ?? 1}
+                  {row.base ? `鉤在R${row.base}` : `起點 ${row.startAt ?? 1}`}
                 </button>
                 <label className="muted" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 2 }} title="這一行代表幾圈">
                   <span>×</span>
@@ -144,7 +144,7 @@ export default function RowList(p: Props) {
                   </div>
                 );
               })()}
-              {(starts.has(row.id) || (row.startAt ?? 1) > 1) && (
+              {(starts.has(row.id) || (row.startAt ?? 1) > 1 || !!row.base) && (
                 <div className="row-start">
                   <label>
                     從上一{p.part.settings.method === 'flat' ? '排' : '圈'}第
@@ -153,7 +153,13 @@ export default function RowList(p: Props) {
                     針開始鉤
                   </label>
                   <span className="muted">{p.part.settings.method === 'flat' ? '（從翻面後碰到的第一針算起；前面的針不鉤）' : '（繞一圈回到這裡）'}</span>
-                  <button className="btn ghost sm" onClick={() => { p.onChange(row.id, { startAt: undefined }); setStarts((s) => { const n = new Set(s); n.delete(row.id); return n; }); }}>改回第 1 針</button>
+                  <label title="例如「鉤R2的外半針」：回到前面某一圈留下的針目上鉤">
+                    鉤在第
+                    <input type="number" min={1} max={Math.max(1, info.first - 1)} value={row.base ?? ''} placeholder="上一" aria-label={`${label} 鉤在第幾圈上`}
+                      onChange={(e) => { const n = Math.floor(Number(e.target.value)); p.onChange(row.id, { base: n >= 1 && n < info.first ? n : undefined }); }} />
+                    {p.part.settings.method === 'flat' ? '排' : '圈'}上
+                  </label>
+                  <button className="btn ghost sm" onClick={() => { p.onChange(row.id, { startAt: undefined, base: undefined }); setStarts((s) => { const n = new Set(s); n.delete(row.id); return n; }); }}>改回第 1 針</button>
                 </div>
               )}
               {showNote && (

@@ -65,6 +65,10 @@ export default function PartSettingsDialog({ part, focus, onSave, onClose, usage
                 {opt('start', 'chain', '鎖針起針', '第一行寫 ch10 這種鎖針數')}
               </div>
             </div>
+            <div className="field"><span>3D 擺法</span>
+              <label style={{ fontSize: 14, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={!!s.flip} onChange={(e) => set({ flip: e.target.checked })} />倒過來放（帽子這種從尖端開始鉤的）</label>
+              {s.method === 'flat' && <label style={{ fontSize: 14, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={!!s.roll} onChange={(e) => set({ roll: e.target.checked })} />鉤完捲起來（玫瑰花、奶油花邊）</label>}
+            </div>
             <div className="field"><label htmlFor="ptags">標籤（用逗號分開）</label>
               <input id="ptags" className="input" value={draft.tags.join('，')} onChange={(e) => setDraft({ ...draft, tags: e.target.value.split(/[,，、]/).map((t) => t.trim()).filter(Boolean) })} />
             </div>
