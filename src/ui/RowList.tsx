@@ -83,7 +83,10 @@ export default function RowList(p: Props) {
             <div key={row.id} className={`row${isActive ? ' active' : ''}${bad ? ' bad' : ''}`}>
               <div className="row-no">
                 <span>{label}</span>
-                {(row.startAt ?? 1) > 1 && <span className="tag" style={{ fontSize: 10, padding: '0 4px', alignSelf: 'flex-start' }}>起點 {row.startAt}</span>}
+                <button className={`start-chip${(row.startAt ?? 1) > 1 ? ' on' : ''}`} title="這一圈從上一圈的第幾針開始鉤" aria-label={`${label} 設定起點`}
+                  onClick={() => setStarts((s) => { const n = new Set(s); if (n.has(row.id) && (row.startAt ?? 1) <= 1) n.delete(row.id); else n.add(row.id); return n; })}>
+                  起點 {row.startAt ?? 1}
+                </button>
                 <label className="muted" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 2 }} title="這一行代表幾圈">
                   <span>×</span>
                   <RepeatInput value={row.repeat} label={`${label} 重複幾圈`} onCommit={(n) => p.onChange(row.id, { repeat: n })} />
@@ -125,7 +128,6 @@ export default function RowList(p: Props) {
                     <span style={{ width: 12, height: 12, borderRadius: 3, background: p.currentColor.hex, border: '1px solid var(--line)' }} />整圈
                   </button>
                 )}
-                <button title="這一圈從上一圈的第幾針開始鉤" aria-label="設定起點" onClick={() => setStarts((s) => new Set(s).add(row.id))} style={{ width: 'auto', padding: '0 6px', fontSize: 12 }}>起點</button>
                 <button title="備註" aria-label="備註" onClick={() => setNotes((s) => new Set(s).add(row.id))}>✎</button>
                 <button title="複製這一行到下方" aria-label="複製這一行" onClick={() => p.onDuplicate(row.id)}>⧉</button>
                 <button title="上移" aria-label="上移" onClick={() => p.onMove(row.id, -1)}>↑</button>
