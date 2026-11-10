@@ -56,4 +56,6 @@ export interface Prefs {
   stuffed: boolean;
   background: 'white' | 'transparent';
   symbolColor: 'symbol' | 'cell';
+  /** Width of the 3D panel on wide screens, in px. */
+  panelWidth: number;
 }

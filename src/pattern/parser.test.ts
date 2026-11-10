@@ -181,3 +181,20 @@ describe('analyze', () => {
     expect(a.rounds[3].status).toBe('ok');
   });
 });
+
+import { stitchesToText } from './parser';
+
+describe('stitchesToText', () => {
+  it('round-trips patterns to equivalent text', () => {
+    for (const src of ['X*30', '(X,V)*6', '[3F]', '(X,[2F])*6', 'BLO(X*30)', 'X*3,FLO(X,X),[2ch,F]*2,sk', '(sk,[5F],sk,X)*4']) {
+      const a = parseRound(src).stitches;
+      const b = parseRound(stitchesToText(a)).stitches;
+      expect(b.map((s) => [s.code, s.mod ?? '', s.group === undefined ? '' : 'g'])).toEqual(a.map((s) => [s.code, s.mod ?? '', s.group === undefined ? '' : 'g']));
+    }
+  });
+  it('writes a changed stitch in place', () => {
+    const st = parseRound('X*30').stitches.map((s) => ({ ...s }));
+    st[10] = { code: 'P' };
+    expect(stitchesToText(st)).toBe('X*10,P,X*19');
+  });
+});

@@ -32,6 +32,7 @@ const defaultPrefs: Prefs = {
   stuffed: true,
   background: 'white',
   symbolColor: 'symbol',
+  panelWidth: 460,
 };
 
 function samples(): Pick<State, 'parts' | 'works'> {

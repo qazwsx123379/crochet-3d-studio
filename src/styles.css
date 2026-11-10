@@ -75,6 +75,9 @@ a { color: var(--accent); }
 .ed-body { flex: 1; display: flex; min-height: 0; }
 .ed-left { width: 300px; flex: none; background: var(--surface); border-right: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
 .ed-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 16px 20px; gap: 12px; }
+.ed-resize { width: 8px; flex: none; cursor: col-resize; background: transparent; position: relative; margin: 0 -4px; z-index: 5; touch-action: none; }
+.ed-resize::after { content: ''; position: absolute; top: 50%; left: 2px; width: 4px; height: 48px; margin-top: -24px; border-radius: 2px; background: var(--line); }
+.ed-resize:hover::after { background: var(--accent); }
 .ed-right { width: 460px; flex: none; background: var(--surface); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
 .ed-tabs { display: none; }
 .st-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
@@ -89,7 +92,7 @@ a { color: var(--accent); }
 .swatch { height: 40px; border-radius: 10px; border: 1px solid var(--line); }
 .swatch[aria-pressed='true'] { outline: 3px solid var(--ink); outline-offset: 1px; }
 
-.rows { flex: 1; min-height: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
+.rows { container-type: inline-size; flex: 1; min-height: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
 .rows-head, .row { display: grid; grid-template-columns: 76px 96px minmax(0, 1fr) 64px 200px; gap: 10px; align-items: center; padding: 0 12px; }
 .rows-head { font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); height: 36px; flex: none; }
 .rows-list { overflow-y: auto; flex: 1; }
@@ -156,6 +159,7 @@ a { color: var(--accent); }
   .hide-phone { display: none !important; }
   .show-phone { display: inline-flex !important; }
   .ed-tabs { display: flex; padding: 8px 12px 0; }
+  .ed-resize { display: none; }
   .ed-tabs .seg { width: 100%; }
   .ed-tabs .seg button { flex: 1; height: 38px; }
   .ed-body { flex-direction: column; }
@@ -168,6 +172,16 @@ a { color: var(--accent); }
   .ed-body[data-tab='3d'] .ed-left { display: none; }
   .rows-head { display: none; }
   .row { grid-template-columns: 52px minmax(0, 1fr) 44px; gap: 6px; padding: 0 8px; }
+  .row .strip-cell, .row .row-tools { display: none; }
+  .row.active .row-tools { display: flex; grid-column: 1 / 4; justify-content: flex-start; padding-bottom: 6px; opacity: 1; }
+  .row-note { grid-column: 1 / 4; }
+  .row-colors { grid-column: 2 / 4; }
+}
+
+/* A narrow pattern column (big 3D panel, small window): the compact phone layout. */
+@container (max-width: 680px) {
+  .rows-head { display: none; }
+  .row { grid-template-columns: 60px minmax(0, 1fr) 52px; gap: 6px; padding: 0 8px; }
   .row .strip-cell, .row .row-tools { display: none; }
   .row.active .row-tools { display: flex; grid-column: 1 / 4; justify-content: flex-start; padding-bottom: 6px; opacity: 1; }
   .row-note { grid-column: 1 / 4; }

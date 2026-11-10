@@ -4,6 +4,7 @@ import type { PatternRow, RoundInfo } from '../pattern/analyze';
 import { analyze } from '../pattern/analyze';
 import { colorChangeText, colorChanges, roundColorIds, roundHexes, roundKey, stitchKey } from '../pattern/colors';
 import { STITCHES, STITCH_BY_CODE } from '../pattern/stitches';
+import { parseRound, stitchesToText } from '../pattern/parser';
 import { prepareRender } from '../three/render';
 import type { Pick, ViewName } from '../three/Preview3D';
 import { THEMES } from '../themes';
@@ -78,6 +79,8 @@ export default function Editor({ partId }: { partId: string }) {
   const [fresh] = useState(() => isFreshPart(partId));
   const [dialog, setDialog] = useState<null | 'settings' | 'palette' | 'import'>(fresh ? 'settings' : null);
   const [combo, setCombo] = useState<ComboKind | null>(null);
+  /** Width while the divider is being dragged (saved when released). */
+  const [liveWidth, setLiveWidth] = useState<number | null>(null);
   const [toast, setToast] = useState('');
   const segAnchor = useRef<Pick | null>(null);
   const inputRefs = useRef(new Map<string, HTMLInputElement>());
@@ -209,6 +212,48 @@ export default function Editor({ partId }: { partId: string }) {
     for (const r of rounds) for (let i = from; i <= to && i < r.stitches.length; i++) stitchColors[stitchKey(r, i)] = colorId;
     return { ...p, stitchColors };
   });
+  /**
+   * Change one stitch of one round (picked in 3D or on the chart) and write the
+   * round back as text. A row standing for several rounds is split so only the
+   * picked round changes; colours follow their rounds.
+   */
+  const [swapCode, setSwapCode] = useState('P');
+  const replaceStitch = (pick: Pick, code: string) => {
+    if (!analysis) return;
+    const r = analysis.rounds.find((x) => x.no === pick.roundNo);
+    const st = r?.stitches[pick.index];
+    if (!r || !st) return;
+    if (st.group !== undefined) { setToast('這一針在「同一針」群組裡，請直接修改那一圈的文字'); return; }
+    const list = r.stitches.map((s, i) => (i === pick.index ? { code, ...(s.mod ? { mod: s.mod } : {}) } : s));
+    update((p) => {
+      const i = p.rows.findIndex((x) => x.id === r.rowId);
+      const row = p.rows[i];
+      const ring = parseRound(row.text).magicRing ? '魔術環 ' : '';
+      const text = ring + stitchesToText(list);
+      if (row.repeat <= 1) return { ...p, rows: p.rows.map((x) => (x.id === row.id ? { ...x, text } : x)) };
+      // Split R7–12 into R7–(n-1), Rn (changed), R(n+1)–12.
+      const parts: { row: PatternRow; from: number }[] = [];
+      if (r.inRow > 0) parts.push({ row: { ...row, id: newId('row'), repeat: r.inRow }, from: 0 });
+      parts.push({ row: { ...row, id: newId('row'), text, repeat: 1, note: r.inRow > 0 ? '' : row.note }, from: r.inRow });
+      if (r.inRow < row.repeat - 1) parts.push({ row: { ...row, id: newId('row'), repeat: row.repeat - r.inRow - 1, note: '' }, from: r.inRow + 1 });
+      const move = (m: Record<string, string>) => {
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(m)) {
+          if (!k.startsWith(`${row.id}#`)) { out[k] = v; continue; }
+          const [, inRowStr, ...rest] = k.split('#');
+          const inRow = Number(inRowStr);
+          const part = [...parts].reverse().find((x) => inRow >= x.from)!;
+          out[[part.row.id, String(inRow - part.from), ...rest].join('#')] = v;
+        }
+        return out;
+      };
+      const rows = [...p.rows];
+      rows.splice(i, 1, ...parts.map((x) => x.row));
+      return { ...p, rows, stitchColors: move(p.stitchColors), roundColors: move(p.roundColors) };
+    });
+    setToast(`R${r.no} 第 ${pick.index + 1} 針換成「${STITCH_BY_CODE[code]?.name ?? code}」`);
+  };
+
   const paintRound = (rounds: RoundInfo[]) => update((p) => {
     const stitchColors = { ...p.stitchColors };
     const roundColors = { ...p.roundColors };
@@ -302,6 +347,9 @@ export default function Editor({ partId }: { partId: string }) {
   };
 
   const showChart = phone ? tab === 'chart' : center === 'chart';
+  // Keep at least 420px for the pattern next to the 300px stitch panel.
+  const maxPanel = () => Math.max(320, window.innerWidth - 300 - 420);
+  const big = prefs.panelWidth >= Math.min(700, maxPanel() - 20);
   const selRound = selected ? analysis.rounds.find((r) => r.no === selected.roundNo) : undefined;
   const selStitch = selRound?.stitches[selected!.index];
   const accent = (THEMES.find((t) => t.id === prefs.theme) ?? THEMES[0]).accent;
@@ -374,13 +422,27 @@ export default function Editor({ partId }: { partId: string }) {
           )}
         </main>
 
-        <section className="ed-right" aria-label="3D 預覽">
+        <div className="ed-resize" role="separator" aria-orientation="vertical" aria-label="拖曳調整 3D 預覽寬度" title="拖曳調整 3D 預覽寬度"
+          onPointerDown={(e) => {
+            const startX = e.clientX, startW = prefs.panelWidth;
+            const el = e.currentTarget;
+            el.setPointerCapture(e.pointerId);
+            const move = (ev: PointerEvent) => setLiveWidth(Math.max(320, Math.min(maxPanel(), startW + (startX - ev.clientX))));
+            const up = (ev: PointerEvent) => {
+              el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up);
+              actions.setPrefs({ panelWidth: Math.max(320, Math.min(maxPanel(), startW + (startX - ev.clientX))) });
+              setLiveWidth(null);
+            };
+            el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
+          }} />
+        <section className="ed-right" aria-label="3D 預覽" style={phone ? undefined : { width: Math.min(liveWidth ?? prefs.panelWidth, maxPanel()) }}>
           <div className="p3-head">
             <span className="label" style={{ marginRight: 'auto' }}>3D 預覽</span>
             <button className="btn icon" aria-label="正面" title="正面" onClick={() => setView((v) => ({ name: 'front', n: v.n + 1 }))}>正</button>
             <button className="btn icon" aria-label="側面" title="側面" onClick={() => setView((v) => ({ name: 'side', n: v.n + 1 }))}>側</button>
             <button className="btn icon" aria-label="俯視" title="俯視" onClick={() => setView((v) => ({ name: 'top', n: v.n + 1 }))}>俯</button>
             <button className="btn" title="上下翻轉（帽子從帽尖開始鉤時用）" aria-pressed={!!part.settings.flip} onClick={() => update((p) => ({ ...p, settings: { ...p.settings, flip: !p.settings.flip } }))}>⇅ 翻轉</button>
+            <button className="btn hide-phone" title={big ? '還原 3D 大小' : '把 3D 放大'} onClick={() => actions.setPrefs({ panelWidth: big ? 460 : maxPanel() })}>{big ? '⤡ 還原' : '⤢ 放大'}</button>
             <button className="btn" aria-pressed={autoRotate} onClick={() => setAutoRotate((a) => !a)} style={autoRotate ? { borderColor: 'var(--accent)', color: 'var(--accent-ink)', background: 'var(--soft)' } : undefined}>⟳ 自動旋轉</button>
           </div>
           <div className={`p3-view${prefs.background === 'transparent' ? ' transparent' : ''}`} >
@@ -388,7 +450,16 @@ export default function Editor({ partId }: { partId: string }) {
               <Preview3D data={shape} flip={!!part.settings.flip} yarn={useYarn} autoRotate={autoRotate} selected={selected} accent={accent} view={view} fitKey={partId} onPick={handlePick} />
             </Suspense>
             <div className="p3-badge">
-              {selRound && selStitch ? `選取：R${selRound.no} 第 ${selected!.index + 1} 針（${STITCH_BY_CODE[selStitch.code]?.name ?? selStitch.code}${selStitch.mod ? `・${selStitch.mod === 'BLO' ? '後半針' : '前半針'}` : ''}）` : shape ? '點針可跳到那一圈・滾輪或雙指可放大看針目' : '寫下第一圈就會出現 3D'}
+              <div>{selRound && selStitch ? `選取：R${selRound.no} 第 ${selected!.index + 1} 針（${STITCH_BY_CODE[selStitch.code]?.name ?? selStitch.code}${selStitch.mod ? `・${selStitch.mod === 'BLO' ? '後半針' : '前半針'}` : ''}）` : shape ? '點針可跳到那一圈・滾輪或雙指可放大看針目' : '寫下第一圈就會出現 3D'}</div>
+              {selRound && selStitch && tool === 'select' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                  <label htmlFor="swap" style={{ whiteSpace: 'nowrap' }}>把這針換成</label>
+                  <select id="swap" className="input" style={{ height: 30, padding: '0 6px', fontSize: 12 }} value={swapCode} onChange={(e) => setSwapCode(e.target.value)}>
+                    {STITCHES.map((s) => <option key={s.code} value={s.code}>{s.name}（{s.code}）</option>)}
+                  </select>
+                  <button className="btn sm pri" onClick={() => replaceStitch(selected!, swapCode)}>換</button>
+                </div>
+              )}
             </div>
             <div className="p3-toggles">
               <label><input type="checkbox" checked={prefs.stuffed} onChange={(e) => actions.setPrefs({ stuffed: e.target.checked })} style={{ accentColor: 'var(--accent)' }} /> 塞棉花</label>

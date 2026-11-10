@@ -252,3 +252,52 @@ export function toChinese(src: string): string {
     return src;
   }
 }
+
+/**
+ * Write a list of stitches back as compact pattern text, the inverse of
+ * parseRound: runs become X*10, same-stitch groups become [3F], loop-only
+ * runs become BLO(…). Used when one stitch of a round is changed by clicking.
+ */
+export function stitchesToText(stitches: Stitch[]): string {
+  type Item = { text: string; mod?: Stitch['mod'] };
+  const items: Item[] = [];
+  let i = 0;
+  while (i < stitches.length) {
+    const s = stitches[i];
+    if (s.group !== undefined) {
+      let j = i;
+      while (j < stitches.length && stitches[j].group === s.group) j++;
+      const inner: string[] = [];
+      for (let k = i; k < j;) {
+        let m = k;
+        while (m < j && stitches[m].code === stitches[k].code) m++;
+        inner.push(m - k > 1 ? `${m - k}${stitches[k].code}` : stitches[k].code);
+        k = m;
+      }
+      items.push({ text: `[${inner.join(',')}]`, mod: s.mod });
+      i = j;
+      continue;
+    }
+    let j = i;
+    while (j < stitches.length && stitches[j].group === undefined && stitches[j].code === s.code && stitches[j].mod === s.mod) j++;
+    items.push({ text: j - i > 1 ? `${s.code}*${j - i}` : s.code, mod: s.mod });
+    i = j;
+  }
+  // Merge identical neighbouring items ([2F],[2F] → [2F]*2) and wrap loop-only runs.
+  const out: string[] = [];
+  let k = 0;
+  while (k < items.length) {
+    const mod = items[k].mod;
+    let j = k;
+    const parts: string[] = [];
+    while (j < items.length && items[j].mod === mod) {
+      let m = j;
+      while (m < items.length && items[m].mod === mod && items[m].text === items[j].text && items[j].text.startsWith('[')) m++;
+      parts.push(m - j > 1 ? `${items[j].text}*${m - j}` : items[j].text);
+      j = Math.max(m, j + 1);
+    }
+    out.push(mod ? `${mod}(${parts.join(',')})` : parts.join(','));
+    k = j;
+  }
+  return out.join(',');
+}
