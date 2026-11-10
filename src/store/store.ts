@@ -302,8 +302,49 @@ export const actions = {
   setPrefs(p: Partial<Prefs>) {
     set({ ...state, prefs: { ...state.prefs, ...p } });
   },
+  /**
+   * Bring in parts and works from a JSON backup. Anything whose id is already
+   * taken comes in as a copy with a new id, so nothing here is overwritten.
+   */
+  importData(parts: Part[], works: Work[]): { parts: number; works: number } {
+    const remap = new Map<string, string>();
+    const nextParts = { ...state.parts };
+    const now = Date.now();
+    for (const p of parts) {
+      if (!p || typeof p.id !== 'string' || !Array.isArray(p.rows)) continue;
+      const id = nextParts[p.id] ? newId('part') : p.id;
+      remap.set(p.id, id);
+      nextParts[id] = { ...p, id, sample: false, updatedAt: now, tags: p.tags ?? [], palette: p.palette ?? [], stitchColors: p.stitchColors ?? {}, roundColors: p.roundColors ?? {} };
+    }
+    const nextWorks = { ...state.works };
+    let w = 0;
+    for (const wk of works) {
+      if (!wk || typeof wk.id !== 'string') continue;
+      const id = nextWorks[wk.id] ? newId('work') : wk.id;
+      const fix = (pid: string) => remap.get(pid) ?? pid;
+      nextWorks[id] = { ...wk, id, sample: false, updatedAt: now, tags: wk.tags ?? [], partIds: (wk.partIds ?? []).map(fix), items: wk.items?.map((it) => ({ ...it, partId: fix(it.partId) })) };
+      w++;
+    }
+    set({ ...state, parts: nextParts, works: nextWorks });
+    return { parts: remap.size, works: w };
+  },
   resetSamples() {
     const s = samples();
     set({ ...state, parts: { ...state.parts, ...s.parts }, works: { ...state.works, ...s.works } });
   },
 };
+
+/* ---------------- online / offline ---------------- */
+
+let online = typeof navigator === 'undefined' ? true : navigator.onLine;
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { online = true; emit(); });
+  window.addEventListener('offline', () => { online = false; emit(); });
+}
+/**
+ * Whether edits are allowed: the real site is view-only while offline (as
+ * agreed in the spec), so nothing typed offline can conflict with the cloud.
+ */
+export function useCanEdit(): boolean {
+  return useSyncExternalStore(subscribe, () => !CLOUD || online);
+}

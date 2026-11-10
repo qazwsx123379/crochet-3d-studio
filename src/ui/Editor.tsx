@@ -2,17 +2,19 @@ import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffe
 import type { Part } from '../types';
 import type { PatternRow, RoundInfo } from '../pattern/analyze';
 import { analyze } from '../pattern/analyze';
-import { colorChangeText, colorChanges, roundColorIds, roundHexes, roundKey, stitchKey } from '../pattern/colors';
+import { roundColorIds, roundHexes, roundKey, stitchKey } from '../pattern/colors';
 import { STITCHES, STITCH_BY_CODE } from '../pattern/stitches';
 import { prepareRender } from '../three/render';
 import type { Pick, ViewName } from '../three/Preview3D';
 import { THEMES } from '../themes';
-import { actions, clearFreshPart, isFreshPart, useSaveStatus, useStore } from '../store/store';
+import { actions, clearFreshPart, isFreshPart, useCanEdit, useSaveStatus, useStore } from '../store/store';
 import { newId } from '../store/yarns';
 import { useHistory } from './useHistory';
 import StitchPanel, { type PaintTool } from './StitchPanel';
 import RowList from './RowList';
 import SymbolChart from './SymbolChart';
+import { patternText } from '../pattern/text';
+const ExportDialog = lazy(() => import('./ExportDialog'));
 import PartSettingsDialog from './PartSettingsDialog';
 import ImportDialog from './ImportDialog';
 import ThemeMenu from './ThemeMenu';
@@ -77,6 +79,7 @@ export default function Editor({ partId }: { partId: string }) {
   // A part just created opens on its settings, so the start (magic ring or chain) is chosen first.
   const [fresh] = useState(() => isFreshPart(partId));
   const [dialog, setDialog] = useState<null | 'settings' | 'palette' | 'import'>(fresh ? 'settings' : null);
+  const [exporting, setExporting] = useState(false);
   const [combo, setCombo] = useState<ComboKind | null>(null);
   /** Width while the divider is being dragged (saved when released). */
   const [liveWidth, setLiveWidth] = useState<number | null>(null);
@@ -116,7 +119,8 @@ export default function Editor({ partId }: { partId: string }) {
     return () => clearInterval(id);
   }, [playing, total]);
 
-  const update = useCallback((fn: (p: Part) => Part, mergeKey?: string) => hist.set((p) => (p ? fn(p) : p), mergeKey), [hist]);
+  const canEdit = useCanEdit();
+  const update = useCallback((fn: (p: Part) => Part, mergeKey?: string) => { if (canEdit) hist.set((p) => (p ? fn(p) : p), mergeKey); }, [hist, canEdit]);
   const changeRow = useCallback((id: string, patch: Partial<PatternRow>, mergeKey?: string) => update((p) => ({ ...p, rows: p.rows.map((r) => (r.id === id ? { ...r, ...patch } : r)) }), mergeKey), [update]);
 
   // Focus is applied right after React renders the new text, so the cursor lands
@@ -293,14 +297,7 @@ export default function Editor({ partId }: { partId: string }) {
   for (const r of analysis.rounds) for (const id of roundColorIds(part, r)) usage[id] = (usage[id] ?? 0) + 1;
 
   const copyAll = async () => {
-    const changes = colorChanges(part, analysis.rounds);
-    const text = analysis.rows.map((ri) => {
-      const start = (ri.row.startAt ?? 1) > 1 ? `（從上一${part.settings.method === 'flat' ? '排' : '圈'}第 ${ri.row.startAt} 針開始）` : '';
-      const head = `${ri.first === ri.last ? `R${ri.first}` : `R${ri.first}-R${ri.last}`}${start}: ${ri.row.text} (${ri.produced})${ri.row.note ? `  # ${ri.row.note}` : ''}`;
-      const colours = analysis.rounds.filter((r) => r.rowId === ri.row.id && changes.has(r.no))
-        .map((r) => `    ${ri.first !== ri.last ? `R${r.no} ` : ''}顏色：${colorChangeText(changes.get(r.no)!)}`);
-      return [head, ...colours].join('\n');
-    }).join('\n');
+    const text = patternText(part, analysis);
     try { await navigator.clipboard.writeText(text); setToast('已複製整份織圖文字'); } catch { setToast('這個瀏覽器不允許複製，請改用匯出'); }
   };
 
@@ -333,6 +330,7 @@ export default function Editor({ partId }: { partId: string }) {
         <button className="btn icon" aria-label="重做" title="重做（Ctrl+Y）" disabled={!hist.canRedo} onClick={hist.redo}>↷</button>
         <button className="btn hide-phone" onClick={() => setDialog('import')}>貼上織圖</button>
         <button className="btn hide-phone" onClick={copyAll}>複製文字</button>
+        <button className="btn" onClick={() => setExporting(true)}>匯出</button>
         <button className="btn" onClick={() => setDialog('settings')}>零件設定</button>
         <ThemeMenu />
       </header>
@@ -345,8 +343,9 @@ export default function Editor({ partId }: { partId: string }) {
         </div>
       </div>
 
+      {!canEdit && <div className="offline-bar" role="status">目前沒有網路：可以瀏覽織圖和 3D，恢復連線後才能修改。</div>}
       <div className="ed-body" data-tab={tab}>
-        <StitchPanel onStitch={insertStitch} onCombo={setCombo} palette={part.palette} color={colorId} onColor={pickColor} tool={tool} onTool={(t) => { setTool(t); segAnchor.current = null; }} onEditPalette={() => setDialog('palette')} />
+        <fieldset disabled={!canEdit} className="ro-wrap"><StitchPanel onStitch={insertStitch} onCombo={setCombo} palette={part.palette} color={colorId} onColor={pickColor} tool={tool} onTool={(t) => { setTool(t); segAnchor.current = null; }} onEditPalette={() => setDialog('palette')} /></fieldset>
 
         <main className="ed-mid">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -372,11 +371,11 @@ export default function Editor({ partId }: { partId: string }) {
           {showChart ? (
             <SymbolChart part={part} analysis={analysis} mode={prefs.symbolColor} selected={selected} onPick={handlePick} />
           ) : (
-            <RowList
+            <fieldset disabled={!canEdit} className="ro-wrap"><RowList
               part={part} analysis={analysis} activeRowId={activeRowId} display={prefs.display} inputRefs={inputRefs}
               onFocusRow={focusRowLink} onChange={changeRow} onAddAfter={addRowAfter} onDelete={deleteRow} onDuplicate={duplicateRow} onMove={moveRow}
               onStripPaint={stripPaint} paintActive={tool !== 'select'} onPaintRow={paintRow} currentColor={part.palette.find((c) => c.id === colorId)}
-            />
+            /></fieldset>
           )}
         </main>
 
@@ -459,6 +458,7 @@ export default function Editor({ partId }: { partId: string }) {
           onClose={() => setCombo(null)}
           onInsert={(text) => { setCombo(null); insertText((before, _sel, after) => { const tok = joinToken(before, text); return { text: before + tok + after, caret: before.length + tok.length }; }); }} />
       )}
+      {exporting && <Suspense fallback={null}><ExportDialog kind="part" part={part} onClose={() => setExporting(false)} /></Suspense>}
       {dialog === 'import' && (
         <ImportDialog onClose={() => setDialog(null)} onImport={(rows, replace) => { update((p) => ({ ...p, rows: replace ? rows : [...p.rows.filter((r) => r.text.trim() !== ''), ...rows] })); setDialog(null); }} />
       )}

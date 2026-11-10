@@ -39,6 +39,27 @@ export default function Library() {
   const q = query.trim().toLowerCase();
   const filtered = items.filter((x) => (!tag || x.tags.includes(tag)) && (!q || x.name.toLowerCase().includes(q) || x.tags.some((t) => t.toLowerCase().includes(q))));
 
+  const [note, setNote] = useState('');
+  const exportAll = () => {
+    const data = { app: 'crochet-3d-studio', version: 1, exportedAt: new Date().toISOString(), parts: Object.values(parts), works: Object.values(works) };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    a.download = `鉤織備份_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  };
+  const importFile = async (f: File) => {
+    try {
+      const data = JSON.parse(await f.text());
+      const ps = Array.isArray(data) ? data : data.parts ?? (data.rows ? [data] : []);
+      const ws = data.works ?? [];
+      const n = actions.importData(ps, ws);
+      setNote(n.parts || n.works ? `匯入了 ${n.parts} 個零件、${n.works} 個作品` : '這個檔案裡沒有找到零件或作品');
+    } catch {
+      setNote('看不懂這個檔案，請選擇從這裡匯出的 JSON 檔');
+    }
+    setTimeout(() => setNote(''), 4000);
+  };
+
   const newPart = () => { const p = actions.createPart(); location.hash = `#/part/${p.id}`; };
   const newWork = () => { const w = actions.createWork(); location.hash = `#/work/${w.id}`; };
 
@@ -53,6 +74,11 @@ export default function Library() {
           </div>
           <div className="spacer" />
           <div style={{ display: 'flex', gap: 8, paddingBottom: 10 }}>
+            <button className="btn" onClick={exportAll} title="把所有零件和作品存成一個 JSON 檔">備份全部</button>
+            <label className="btn" title="從 JSON 備份檔匯入零件和作品" style={{ cursor: 'pointer' }}>
+              匯入
+              <input type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ''; }} />
+            </label>
             <button className="btn" onClick={() => actions.resetSamples()} title="把範例零件恢復成原樣">恢復範例</button>
             {tab === 'parts' ? <button className="btn pri" onClick={newPart}>＋ 新增零件</button> : <button className="btn pri" onClick={newWork}>＋ 新增作品</button>}
           </div>
@@ -64,6 +90,7 @@ export default function Library() {
             {tags.map((t) => <button key={t} className="chip" aria-pressed={tag === t} onClick={() => setTag(t === tag ? null : t)}>{t}</button>)}
           </div>
         )}
+        {note && <p role="status" className="status-pill" style={{ alignSelf: 'flex-start' }}>{note}</p>}
         {filtered.length === 0 && <p className="muted">沒有符合的{tab === 'parts' ? '零件' : '作品'}。</p>}
         <div className="grid">
           {filtered.map((x) => {

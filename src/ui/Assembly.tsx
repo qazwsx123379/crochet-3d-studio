@@ -6,7 +6,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import type { Accessory, AccessoryKind, Part, V3, Work, WorkItem } from '../types';
-import { actions, useStore } from '../store/store';
+import { actions, useCanEdit, useStore } from '../store/store';
 import { newId } from '../store/yarns';
 import ThemeMenu from './ThemeMenu';
 import { alignItems, defaultItems, partData, roundNumbers, spreadAlong, stitchCount } from '../three/assembly';
@@ -49,6 +49,7 @@ export function WorkPage({ workId }: { workId: string }) {
   const [adding, setAdding] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState('');
+  const canEdit = useCanEdit();
 
   // A work arranged before assembly existed gets a starting layout, saved once.
   useEffect(() => {
@@ -64,6 +65,7 @@ export function WorkPage({ workId }: { workId: string }) {
   if (!work) return <div className="page"><div className="lib"><p>找不到這個作品。</p><a className="btn" href="#/">回作品庫</a></div></div>;
 
   const save = (patch: Partial<Work>) => {
+    if (!canEdit) { flash('目前沒有網路：恢復連線後才能修改'); return; }
     const next = { ...work, ...patch };
     // The part list follows what is placed, so the library and exports stay in step.
     if (patch.items) next.partIds = [...new Set([...patch.items.map((i) => i.partId)])];

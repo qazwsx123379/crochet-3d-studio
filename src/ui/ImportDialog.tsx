@@ -1,18 +1,47 @@
 import { useMemo, useState } from 'react';
 import type { PatternRow } from '../pattern/analyze';
-import { splitRoundPrefix } from '../pattern/parser';
+import { parseRound, splitRoundPrefix } from '../pattern/parser';
 import { newId } from '../store/yarns';
 
 /** Turn pasted lines (`R1: 6X`, `R8-R12: X*30`, or plain lines) into rows. */
+/**
+ * Common phrasings from Chinese pattern posts, rewritten into the editor's
+ * notation: 「69起针倒3钩67F」 → 69ch 然後 67F, 「棕色63ch」 → 63ch with a colour note.
+ */
+function tidy(body: string): { text: string; note: string } {
+  const notes: string[] = [];
+  let t = body;
+  const colour = t.match(/^([\u4e00-\u9fa5]{1,3}色)\s*[,，、]?\s*/);
+  if (colour) { notes.push(`換${colour[1]}`); t = t.slice(colour[0].length); }
+  t = t.replace(/(\d+)\s*(?:個|个)?\s*起[针針]/g, '$1ch,');
+  t = t.replace(/倒(?:数|數)?第?\s*([\d一二三四五六])\s*[回针針]?\s*(?:开始|開始)?\s*[钩鉤]?/g, (_m, n) => { notes.push(`倒數第 ${n} 針開始鉤`); return ','; });
+  return { text: t.replace(/([,，]\s*)+/g, ',').replace(/^[,，\s]+|[,，\s]+$/g, ''), note: notes.join('，') };
+}
+
 export function linesToRows(text: string): PatternRow[] {
   const rows: PatternRow[] = [];
+  let heading = '';
   for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/\(\d+\)\s*$/, '').replace(/（\d+）\s*$/, '').trim();
+    let line = raw.replace(/\(\d+\)\s*$/, '').replace(/（\d+）\s*$/, '').trim();
     if (!line) continue;
+    // 「1. 6x」「2、6v」 numbered lists count as round numbers.
+    line = line.replace(/^(\d+)\s*[.、．]\s*/, 'R$1: ');
     const { from, to, text: body } = splitRoundPrefix(line);
     // A trailing note after # or // stays with the row.
     const m = body.match(/^(.*?)(?:\s*(?:#|\/\/)\s*(.*))?$/);
-    rows.push({ id: newId('row'), text: (m?.[1] ?? body).trim(), repeat: from !== undefined && to !== undefined ? to - from + 1 : 1, note: (m?.[2] ?? '').trim() });
+    const t = tidy((m?.[1] ?? body).trim());
+    // A line with no numbers and no stitches is a heading (「底片」「绿色花边」): keep it as a note.
+    if (from === undefined && !/\d/.test(t.text) && parseRound(t.text).errors.length) { heading = line; continue; }
+    const note = [heading && `【${heading}】`, t.note, (m?.[2] ?? '').trim()].filter(Boolean).join(' ');
+    heading = '';
+    // 「69起针倒3钩67F」 is the starting chain and the first row in one line.
+    const split = !rows.length && t.text.match(/^(\d+ch),(.+)$/);
+    if (split) {
+      rows.push({ id: newId('row'), text: split[1], repeat: 1, note: [heading && `【${heading}】`, '起針'].filter(Boolean).join(' ') });
+      rows.push({ id: newId('row'), text: split[2], repeat: 1, note });
+      continue;
+    }
+    rows.push({ id: newId('row'), text: t.text, repeat: from !== undefined && to !== undefined ? to - from + 1 : 1, note });
   }
   return rows;
 }

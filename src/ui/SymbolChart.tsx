@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, createContext, useContext } from 'react';
 import type { Analysis } from '../pattern/analyze';
 import { stitchParents } from '../pattern/links';
 import type { Part } from '../types';
@@ -182,9 +182,13 @@ export default function SymbolChart({ part, analysis, mode, selected, onPick }: 
 }
 
 /** Scrollable chart with zoom: starts at a readable size; 符合寬度 shows it all. */
+/** Inside an export sheet charts fit the page and hide their zoom buttons. */
+export const ChartPrintContext = createContext(false);
+
 function ChartFrame({ naturalWidth, height, viewBox, label, children }: { naturalWidth: number; height: number; viewBox: string; label: string; children: React.ReactNode }) {
+  const print = useContext(ChartPrintContext);
   const box = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState<number | 'fit'>(1);
+  const [zoom, setZoom] = useState<number | 'fit'>(print ? 'fit' : 1);
   const [fitScale, setFitScale] = useState(1);
   useEffect(() => {
     const el = box.current;
@@ -195,16 +199,16 @@ function ChartFrame({ naturalWidth, height, viewBox, label, children }: { natura
     ro.observe(el);
     return () => ro.disconnect();
   }, [naturalWidth]);
-  const scale = zoom === 'fit' ? fitScale : zoom;
+  const scale = zoom === 'fit' ? (print ? Math.min(1.3, fitScale) : fitScale) : zoom;
   const step = (k: number) => setZoom((z) => Math.max(0.25, Math.min(4, Math.round(((z === 'fit' ? fitScale : z) * k) * 100) / 100)));
   return (
     <div className="chart-wrap">
-      <div className="chart-tools">
+      {!print && <div className="chart-tools">
         <button className="btn icon sm" aria-label="縮小符號圖" onClick={() => step(1 / 1.25)}>－</button>
         <span className="muted" style={{ fontSize: 12, minWidth: 44, textAlign: 'center' }}>{Math.round(scale * 100)}%</span>
         <button className="btn icon sm" aria-label="放大符號圖" onClick={() => step(1.25)}>＋</button>
         <button className="btn sm" aria-pressed={zoom === 'fit'} onClick={() => setZoom(zoom === 'fit' ? 1 : 'fit')}>{zoom === 'fit' ? '原始大小' : '符合寬度'}</button>
-      </div>
+      </div>}
       <div className="chart" ref={box}>
         <svg viewBox={viewBox} width={naturalWidth * scale} height={height * scale} role="img" aria-label={label} style={{ maxWidth: 'none', flex: 'none' }}>
           {children}
