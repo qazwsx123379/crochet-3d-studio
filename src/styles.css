@@ -155,8 +155,10 @@ a { color: var(--accent); }
 .menu .dot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
 
 /* ---------- symbol chart ---------- */
-.chart { flex: 1; min-height: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
-.chart svg { max-width: 100%; height: auto; }
+.chart-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.chart-tools { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.chart { flex: 1; min-height: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: auto; display: flex; align-items: flex-start; padding: 16px; }
+.chart > svg { margin: 0 auto; }
 
 /* ---------- phone ---------- */
 @media (max-width: 899px) {

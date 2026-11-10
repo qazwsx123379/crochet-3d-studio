@@ -53,6 +53,18 @@ export function StitchSymbol({ code, color, mod }: Props) {
         <line x1={-0.32} y1={0.18} x2={-0.06} y2={0.06} /><line x1={0.32} y1={0.18} x2={0.06} y2={0.06} />
       </g>
     ); break;
+    case 'TV': body = (
+      <g stroke={color} strokeWidth={W} strokeLinecap="round" fill="none">
+        <path d="M-0.3 -0.42 L0 0.45 L0.3 -0.42" />
+        <line x1={-0.38} y1={-0.42} x2={-0.2} y2={-0.42} /><line x1={0.2} y1={-0.42} x2={0.38} y2={-0.42} />
+      </g>
+    ); break;
+    case 'TA': body = (
+      <g stroke={color} strokeWidth={W} strokeLinecap="round" fill="none">
+        <path d="M-0.3 0.45 L0 -0.4 L0.3 0.45" />
+        <line x1={-0.18} y1={-0.4} x2={0.18} y2={-0.4} />
+      </g>
+    ); break;
     case 'FV': body = (
       <g stroke={color} strokeWidth={W} strokeLinecap="round" fill="none">
         <path d="M-0.3 -0.42 L0 0.45 L0.3 -0.42" />
