@@ -178,6 +178,7 @@ export function WorkPage({ workId }: { workId: string }) {
             <button className="btn sm ghost" onClick={() => setView((v) => ({ name: 'side', n: v.n + 1 }))}>側</button>
             <button className="btn sm ghost" onClick={() => setView((v) => ({ name: 'top', n: v.n + 1 }))}>俯</button>
             <button className="btn sm ghost" onClick={() => setFit((f) => f + 1)}>看全部</button>
+            <button className="btn sm ghost" title="把零件重新排成預設的樣子（配件會保留）" onClick={() => { save({ items: defaultItems(work, parts, true) }); setSelected(null); setFit((f) => f + 1); }}>還原預設擺法</button>
           </div>
           {placing && <div className="asm-hint">點零件表面，把「{accName(placing)}」放上去 <button className="btn sm ghost" onClick={() => setPlacing(null)}>取消</button></div>}
           {!placing && !selected && <div className="asm-hint subtle">點一個零件選取它，再拖曳箭頭移動；左邊可以加入配件</div>}

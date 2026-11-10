@@ -215,7 +215,40 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
     const k = ratio <= 1.2 ? 0.08 : ratio <= 1.6 ? 0.03 : 0.004;
     for (const i of ids) flatPull[i] = k;
   });
+  // A round worked into the back loops of a round that the fabric then carries
+  // on from (the next round goes 「鉤在 R4 的外半針」) is a trim: it stands up off
+  // the surface (cream puffs on a tart top) instead of continuing outwards.
+  const effBase = new Map<number, number>();
+  usable.forEach((u, i) => effBase.set(u.info.no, u.info.base ?? (i > 0 ? usable[i - 1].info.no : -1)));
+  const trimNos = new Set<number>();
+  for (const u of usable) {
+    const B = u.info.base;
+    if (B === undefined) continue;
+    for (const v of usable) if (v.info.no > B && v.info.no < u.info.no && effBase.get(v.info.no) === B) trimNos.add(v.info.no);
+  }
+  const trim: { id: number; dir: V3 }[] = [];
+  if (trimNos.size && !flat) for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (!trimNos.has(n.roundNo)) continue;
+    const anchor = n.parents.length ? n.parents : [];
+    const ref = anchor.length ? nodes[anchor[0]].placement?.normal : n.placement?.normal;
+    let dir: V3 = ref ? [...ref] as V3 : [0, 1, 0];
+    // On a flat disc the puffs go to the top side.
+    if (Math.abs(dir[1]) > 0.6) dir = [0, 1, 0];
+    trim.push({ id: i, dir: norm(dir) });
+  }
+  const placeTrim = (k: number) => {
+    for (const t of trim) {
+      const n = nodes[t.id];
+      if (!n.parents.length) continue;
+      const base = mul(n.parents.reduce<V3>((acc, q) => add(acc, P[q]), [0, 0, 0]), 1 / n.parents.length);
+      const target = add(base, mul(t.dir, n.height * 0.8));
+      for (let d = 0; d < 3; d++) P[t.id][d] += (target[d] - P[t.id][d]) * k;
+    }
+  };
+  placeTrim(1);
   for (let it = 0; it < iterations; it++) {
+    placeTrim(0.5);
     if (flat) for (let i = 0; i < P.length; i++) if (flatPull[i]) P[i][2] -= P[i][2] * flatPull[i];
     // Keep rounds smooth so the fabric doesn't crumple.
     for (const ids of roundLists) {
@@ -244,6 +277,8 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
       for (let k = 0; k < 3; k++) { pa[k] += d[k] * corr; pb[k] -= d[k] * corr; }
     }
   }
+
+  placeTrim(1);
 
   // ---- rebuild placements from the settled points ----
   const C = mul(P.reduce<V3>((s, p) => add(s, p), [0, 0, 0]), 1 / P.length);

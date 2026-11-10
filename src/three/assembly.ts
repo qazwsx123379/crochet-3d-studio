@@ -230,17 +230,19 @@ const PRESETS: Record<string, (parts: Record<string, Part>, yarn: boolean, item:
     const topScale = r8 ? Math.min(1, (r8.radius * 0.9) / Math.max(1, roundFrame(td, Math.max(...td.rings.keys()))?.radius ?? r8.radius)) : 0.9;
     const topItem = item(top.id, [0, seam + 0.3, 0], [0, 0, 0], topScale);
     out.push(topItem);
-    const surface = seam + 0.3 + h(td) * topScale;
     // Five small strawberries in a ring on the cream, opening down.
-    const ringR = r8 ? r8.radius * 0.55 : 4;
+    // Inside the ring of cream puffs, so the puffs show around them as in the photo.
+    const ringR = r8 ? r8.radius * 0.4 : 3.5;
+    const disc = seam + 0.8;
     for (let k = 0; k < 5; k++) {
       const a = (k / 5) * Math.PI * 2 + 0.3;
-      out.push(item(small.id, [Math.cos(a) * ringR, surface + h(sd) * 0.95, Math.sin(a) * ringR], [180, 0, 0], 0.9));
+      out.push(item(small.id, [Math.cos(a) * ringR, disc + h(sd) * 0.8 * 0.95, Math.sin(a) * ringR], [180, 0, 0], 0.8));
     }
     // The matcha cream rolled up in the middle, the big strawberry and its calyx on top.
-    const mScale = Math.min(1, ((r8 ? r8.radius : 6) * 1.05) / Math.max(1, md.radius));
-    out.push(item(matcha.id, [0, surface + h(sd) * 0.3, 0], [0, 0, 0], mScale));
-    const mTop = surface + h(sd) * 0.3 + h(md) * mScale;
+    // Rolled matcha cream sits on the small strawberries, smaller than the ring they make.
+    const mScale = Math.min(1, ((r8 ? r8.radius : 6) * 0.62) / Math.max(1, md.radius));
+    out.push(item(matcha.id, [0, disc + h(sd) * 0.55, 0], [0, 0, 0], mScale));
+    const mTop = disc + h(sd) * 0.55 + h(md) * mScale;
     out.push(item(big.id, [0, mTop - 0.8, 0]));
     out.push(item(calyx.id, [0, mTop - 0.8 + h(bd) - 0.15, 0], [0, 0, 0], 0.9));
     return out;
