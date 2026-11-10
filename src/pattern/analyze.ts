@@ -18,6 +18,12 @@ export interface PatternRow {
   /** How many identical rounds this row stands for (R6–R10 → 5). */
   repeat: number;
   note: string;
+  /**
+   * Stitch of the round (or row) below where this one begins, 1-based. Rounds
+   * still go all the way round from there; a flat row leaves the stitches
+   * before it unworked. Applies to the row's first round.
+   */
+  startAt?: number;
 }
 
 export type RoundStatus = 'ok' | 'empty' | 'syntax' | 'short' | 'over' | 'start';
@@ -37,6 +43,8 @@ export interface RoundInfo {
   message: string;
   /** Chain foundation length when this round is the starting chain. */
   foundation?: number;
+  /** Where this round begins in the round below (1-based), when not the first stitch. */
+  startAt?: number;
   /** Most stitches are worked in the back or front loop only. */
   loopOnly?: 'BLO' | 'FLO';
 }
@@ -104,12 +112,24 @@ export function analyze(rows: PatternRow[], settings: PartSettingsLike): Analysi
         } else {
           info.message = settings.start === 'ring' ? `魔術環裡鉤 ${parsed.produced} 針` : `第一圈 ${parsed.produced} 針`;
         }
-      } else if (prevProduced !== undefined && parsed.consumed !== prevProduced) {
-        const diff = prevProduced - parsed.consumed;
-        info.status = diff > 0 ? 'short' : 'over';
-        info.message = diff > 0
-          ? `上一圈 ${prevProduced} 針，這圈只用掉 ${parsed.consumed} 針，還差 ${diff} 針`
-          : `上一圈只有 ${prevProduced} 針，這圈要用 ${parsed.consumed} 針，多了 ${-diff} 針`;
+      } else if (prevProduced !== undefined) {
+        const start = k === 0 && row.startAt && row.startAt > 1 ? Math.min(row.startAt, prevProduced) : 1;
+        if (start > 1) info.startAt = start;
+        const flatSkip = settings.method === 'flat' ? start - 1 : 0;
+        const available = prevProduced - flatSkip;
+        const where = start > 1 ? `從上一${settings.method === 'flat' ? '排' : '圈'}第 ${start} 針開始，` : '';
+        if (parsed.consumed > available) {
+          info.status = 'over';
+          info.message = `${where}上一圈${flatSkip ? '剩' : '只有'} ${available} 針，這圈要用 ${parsed.consumed} 針，多了 ${parsed.consumed - available} 針`;
+        } else if (parsed.consumed < available) {
+          if (start > 1) {
+            // Starting part-way along is deliberate shaping: say what is left, don't flag it.
+            info.message = `${where}最後剩 ${available - parsed.consumed} 針沒鉤`;
+          } else {
+            info.status = 'short';
+            info.message = `上一圈 ${prevProduced} 針，這圈只用掉 ${parsed.consumed} 針，還差 ${available - parsed.consumed} 針`;
+          }
+        } else if (start > 1) info.message = `${where}剛好用完`;
       }
       if (k === 0) { rowStatus = info.status; rowMsg = info.message; }
       if (info.status === 'syntax' || info.status === 'short' || info.status === 'over') problems++;

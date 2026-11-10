@@ -66,7 +66,8 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
   for (const r of usable) {
     const ids: number[] = [];
     const slots: number[] = [];
-    let ptr = 0;
+    // Begin where the pattern says, counted from where the work arrives.
+    let ptr = Math.max(0, (r.info.startAt ?? 1) - 1);
     let lastGroup: number | undefined;
     let groupParents: number[] = [];
     // A flat row turns and works back along the row below, from its far end.

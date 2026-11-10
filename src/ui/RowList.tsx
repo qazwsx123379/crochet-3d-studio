@@ -53,6 +53,7 @@ function ColorNote({ label, spans, whole }: { label?: string; spans: ColorSpan[]
 
 export default function RowList(p: Props) {
   const [notes, setNotes] = useState<Set<string>>(new Set());
+  const [starts, setStarts] = useState<Set<string>>(new Set());
   const changes = useMemo(() => colorChanges(p.part, p.analysis.rounds), [p.part, p.analysis]);
   const [focused, setFocused] = useState<string | null>(null);
   const dragFrom = useRef<{ row: string; i: number } | null>(null);
@@ -82,6 +83,7 @@ export default function RowList(p: Props) {
             <div key={row.id} className={`row${isActive ? ' active' : ''}${bad ? ' bad' : ''}`}>
               <div className="row-no">
                 <span>{label}</span>
+                {(row.startAt ?? 1) > 1 && <span className="tag" style={{ fontSize: 10, padding: '0 4px', alignSelf: 'flex-start' }}>起點 {row.startAt}</span>}
                 <label className="muted" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 2 }} title="這一行代表幾圈">
                   <span>×</span>
                   <RepeatInput value={row.repeat} label={`${label} 重複幾圈`} onCommit={(n) => p.onChange(row.id, { repeat: n })} />
@@ -123,6 +125,7 @@ export default function RowList(p: Props) {
                     <span style={{ width: 12, height: 12, borderRadius: 3, background: p.currentColor.hex, border: '1px solid var(--line)' }} />整圈
                   </button>
                 )}
+                <button title="這一圈從上一圈的第幾針開始鉤" aria-label="設定起點" onClick={() => setStarts((s) => new Set(s).add(row.id))} style={{ width: 'auto', padding: '0 6px', fontSize: 12 }}>起點</button>
                 <button title="備註" aria-label="備註" onClick={() => setNotes((s) => new Set(s).add(row.id))}>✎</button>
                 <button title="複製這一行到下方" aria-label="複製這一行" onClick={() => p.onDuplicate(row.id)}>⧉</button>
                 <button title="上移" aria-label="上移" onClick={() => p.onMove(row.id, -1)}>↑</button>
@@ -139,6 +142,18 @@ export default function RowList(p: Props) {
                   </div>
                 );
               })()}
+              {(starts.has(row.id) || (row.startAt ?? 1) > 1) && (
+                <div className="row-start">
+                  <label>
+                    從上一{p.part.settings.method === 'flat' ? '排' : '圈'}第
+                    <input type="number" min={1} value={row.startAt ?? 1} aria-label={`${label} 從上一圈第幾針開始`}
+                      onChange={(e) => p.onChange(row.id, { startAt: Math.max(1, Math.floor(Number(e.target.value)) || 1) })} />
+                    針開始鉤
+                  </label>
+                  <span className="muted">{p.part.settings.method === 'flat' ? '（從翻面後碰到的第一針算起；前面的針不鉤）' : '（繞一圈回到這裡）'}</span>
+                  <button className="btn ghost sm" onClick={() => { p.onChange(row.id, { startAt: undefined }); setStarts((s) => { const n = new Set(s); n.delete(row.id); return n; }); }}>改回第 1 針</button>
+                </div>
+              )}
               {showNote && (
                 <div className="row-note">
                   <input value={row.note} placeholder="備註，例如：這圈開始塞棉花" aria-label={`${label} 備註`} onChange={(e) => p.onChange(row.id, { note: e.target.value }, `note:${row.id}`)} />

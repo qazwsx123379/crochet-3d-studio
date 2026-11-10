@@ -4,7 +4,6 @@ import type { PatternRow, RoundInfo } from '../pattern/analyze';
 import { analyze } from '../pattern/analyze';
 import { colorChangeText, colorChanges, roundColorIds, roundHexes, roundKey, stitchKey } from '../pattern/colors';
 import { STITCHES, STITCH_BY_CODE } from '../pattern/stitches';
-import { parseRound, stitchesToText } from '../pattern/parser';
 import { prepareRender } from '../three/render';
 import type { Pick, ViewName } from '../three/Preview3D';
 import { THEMES } from '../themes';
@@ -212,48 +211,6 @@ export default function Editor({ partId }: { partId: string }) {
     for (const r of rounds) for (let i = from; i <= to && i < r.stitches.length; i++) stitchColors[stitchKey(r, i)] = colorId;
     return { ...p, stitchColors };
   });
-  /**
-   * Change one stitch of one round (picked in 3D or on the chart) and write the
-   * round back as text. A row standing for several rounds is split so only the
-   * picked round changes; colours follow their rounds.
-   */
-  const [swapCode, setSwapCode] = useState('P');
-  const replaceStitch = (pick: Pick, code: string) => {
-    if (!analysis) return;
-    const r = analysis.rounds.find((x) => x.no === pick.roundNo);
-    const st = r?.stitches[pick.index];
-    if (!r || !st) return;
-    if (st.group !== undefined) { setToast('這一針在「同一針」群組裡，請直接修改那一圈的文字'); return; }
-    const list = r.stitches.map((s, i) => (i === pick.index ? { code, ...(s.mod ? { mod: s.mod } : {}) } : s));
-    update((p) => {
-      const i = p.rows.findIndex((x) => x.id === r.rowId);
-      const row = p.rows[i];
-      const ring = parseRound(row.text).magicRing ? '魔術環 ' : '';
-      const text = ring + stitchesToText(list);
-      if (row.repeat <= 1) return { ...p, rows: p.rows.map((x) => (x.id === row.id ? { ...x, text } : x)) };
-      // Split R7–12 into R7–(n-1), Rn (changed), R(n+1)–12.
-      const parts: { row: PatternRow; from: number }[] = [];
-      if (r.inRow > 0) parts.push({ row: { ...row, id: newId('row'), repeat: r.inRow }, from: 0 });
-      parts.push({ row: { ...row, id: newId('row'), text, repeat: 1, note: r.inRow > 0 ? '' : row.note }, from: r.inRow });
-      if (r.inRow < row.repeat - 1) parts.push({ row: { ...row, id: newId('row'), repeat: row.repeat - r.inRow - 1, note: '' }, from: r.inRow + 1 });
-      const move = (m: Record<string, string>) => {
-        const out: Record<string, string> = {};
-        for (const [k, v] of Object.entries(m)) {
-          if (!k.startsWith(`${row.id}#`)) { out[k] = v; continue; }
-          const [, inRowStr, ...rest] = k.split('#');
-          const inRow = Number(inRowStr);
-          const part = [...parts].reverse().find((x) => inRow >= x.from)!;
-          out[[part.row.id, String(inRow - part.from), ...rest].join('#')] = v;
-        }
-        return out;
-      };
-      const rows = [...p.rows];
-      rows.splice(i, 1, ...parts.map((x) => x.row));
-      return { ...p, rows, stitchColors: move(p.stitchColors), roundColors: move(p.roundColors) };
-    });
-    setToast(`R${r.no} 第 ${pick.index + 1} 針換成「${STITCH_BY_CODE[code]?.name ?? code}」`);
-  };
-
   const paintRound = (rounds: RoundInfo[]) => update((p) => {
     const stitchColors = { ...p.stitchColors };
     const roundColors = { ...p.roundColors };
@@ -338,7 +295,8 @@ export default function Editor({ partId }: { partId: string }) {
   const copyAll = async () => {
     const changes = colorChanges(part, analysis.rounds);
     const text = analysis.rows.map((ri) => {
-      const head = `${ri.first === ri.last ? `R${ri.first}` : `R${ri.first}-R${ri.last}`}: ${ri.row.text} (${ri.produced})${ri.row.note ? `  # ${ri.row.note}` : ''}`;
+      const start = (ri.row.startAt ?? 1) > 1 ? `（從上一${part.settings.method === 'flat' ? '排' : '圈'}第 ${ri.row.startAt} 針開始）` : '';
+      const head = `${ri.first === ri.last ? `R${ri.first}` : `R${ri.first}-R${ri.last}`}${start}: ${ri.row.text} (${ri.produced})${ri.row.note ? `  # ${ri.row.note}` : ''}`;
       const colours = analysis.rounds.filter((r) => r.rowId === ri.row.id && changes.has(r.no))
         .map((r) => `    ${ri.first !== ri.last ? `R${r.no} ` : ''}顏色：${colorChangeText(changes.get(r.no)!)}`);
       return [head, ...colours].join('\n');
@@ -451,15 +409,6 @@ export default function Editor({ partId }: { partId: string }) {
             </Suspense>
             <div className="p3-badge">
               <div>{selRound && selStitch ? `選取：R${selRound.no} 第 ${selected!.index + 1} 針（${STITCH_BY_CODE[selStitch.code]?.name ?? selStitch.code}${selStitch.mod ? `・${selStitch.mod === 'BLO' ? '後半針' : '前半針'}` : ''}）` : shape ? '點針可跳到那一圈・滾輪或雙指可放大看針目' : '寫下第一圈就會出現 3D'}</div>
-              {selRound && selStitch && tool === 'select' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                  <label htmlFor="swap" style={{ whiteSpace: 'nowrap' }}>把這針換成</label>
-                  <select id="swap" className="input" style={{ height: 30, padding: '0 6px', fontSize: 12 }} value={swapCode} onChange={(e) => setSwapCode(e.target.value)}>
-                    {STITCHES.map((s) => <option key={s.code} value={s.code}>{s.name}（{s.code}）</option>)}
-                  </select>
-                  <button className="btn sm pri" onClick={() => replaceStitch(selected!, swapCode)}>換</button>
-                </div>
-              )}
             </div>
             <div className="p3-toggles">
               <label><input type="checkbox" checked={prefs.stuffed} onChange={(e) => actions.setPrefs({ stuffed: e.target.checked })} style={{ accentColor: 'var(--accent)' }} /> 塞棉花</label>

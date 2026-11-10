@@ -93,7 +93,7 @@ a { color: var(--accent); }
 .swatch[aria-pressed='true'] { outline: 3px solid var(--ink); outline-offset: 1px; }
 
 .rows { container-type: inline-size; flex: 1; min-height: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
-.rows-head, .row { display: grid; grid-template-columns: 76px 96px minmax(0, 1fr) 64px 200px; gap: 10px; align-items: center; padding: 0 12px; }
+.rows-head, .row { display: grid; grid-template-columns: 76px 96px minmax(0, 1fr) 56px 244px; gap: 10px; align-items: center; padding: 0 12px; }
 .rows-head { font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); height: 36px; flex: none; }
 .rows-list { overflow-y: auto; flex: 1; }
 .row { min-height: 48px; border-bottom: 1px solid var(--divider); border-left: 3px solid transparent; }
@@ -105,6 +105,9 @@ a { color: var(--accent); }
 .row-text input:focus { border-color: var(--line); background: var(--surface); outline: none; }
 .row-msg { font-size: 12px; padding-left: 6px; color: var(--muted); }
 .color-note { color: var(--ink); line-height: 1.7; padding-left: 0; }
+.row-start { grid-column: 3 / 6; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; padding: 0 0 8px 6px; }
+.row-start input { width: 56px; margin: 0 6px; height: 28px; border: 1px solid var(--accent); border-radius: 6px; padding: 0 6px; background: var(--surface); }
+.row-start .muted { font-size: 12px; }
 .row-colors { grid-column: 3 / 6; display: flex; flex-direction: column; padding: 0 0 8px 6px; margin-top: -4px; }
 .color-note b { font-weight: 700; color: var(--muted); }
 .row.bad .row-msg, .row-count.bad { color: var(--warn); }
@@ -176,14 +179,16 @@ a { color: var(--accent); }
   .row.active .row-tools { display: flex; grid-column: 1 / 4; justify-content: flex-start; padding-bottom: 6px; opacity: 1; }
   .row-note { grid-column: 1 / 4; }
   .row-colors { grid-column: 2 / 4; }
+  .row-start { grid-column: 1 / 4; }
 }
 
 /* A narrow pattern column (big 3D panel, small window): the compact phone layout. */
-@container (max-width: 680px) {
+@container (max-width: 560px) {
   .rows-head { display: none; }
   .row { grid-template-columns: 60px minmax(0, 1fr) 52px; gap: 6px; padding: 0 8px; }
   .row .strip-cell, .row .row-tools { display: none; }
   .row.active .row-tools { display: flex; grid-column: 1 / 4; justify-content: flex-start; padding-bottom: 6px; opacity: 1; }
   .row-note { grid-column: 1 / 4; }
   .row-colors { grid-column: 2 / 4; }
+  .row-start { grid-column: 1 / 4; }
 }

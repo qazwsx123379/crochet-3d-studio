@@ -169,6 +169,26 @@ describe('analyze', () => {
     expect(a.rounds[2].status).toBe('ok');
   });
 
+  it('lets a round begin part-way round the one below', () => {
+    const rs: PatternRow[] = [row('6X'), row('(V)*6'), { ...row('X*12'), startAt: 5 }];
+    const a = analyze(rs, ring);
+    expect(a.rounds[2].startAt).toBe(5);
+    expect(a.rounds[2].status).toBe('ok');
+    expect(a.rounds[2].message).toContain('從上一圈第 5 針開始');
+  });
+
+  it('skips the stitches before the start in a flat row', () => {
+    const flat = { method: 'flat' as const, start: 'chain' as const };
+    const ok = analyze([row('ch10'), row('X*10'), { ...row('X*7'), startAt: 4 }], flat);
+    expect(ok.rounds[2].status).toBe('ok');
+    expect(ok.rounds[2].message).toContain('剛好用完');
+    const partial = analyze([row('ch10'), row('X*10'), { ...row('X*5'), startAt: 4 }], flat);
+    expect(partial.rounds[2].status).toBe('ok');
+    expect(partial.rounds[2].message).toContain('最後剩 2 針沒鉤');
+    const over = analyze([row('ch10'), row('X*10'), { ...row('X*9'), startAt: 4 }], flat);
+    expect(over.rounds[2].status).toBe('over');
+  });
+
   it('detects back-loop rounds', () => {
     const a = analyze([row('6X'), row('BLO(X*6)')], ring);
     expect(a.rounds[1].loopOnly).toBe('BLO');

@@ -53,4 +53,16 @@ describe('prepareRender', () => {
     // and the row is shorter end to end than its 40 stitches laid straight
     expect(L).toBeLessThan(38);
   });
+
+  it('starts a round at the chosen stitch of the round below', () => {
+    const plain = rounds(rows(['6X'], ['(V)*6'], ['X*12']));
+    const shifted = analyze([...rows(['6X'], ['(V)*6']), { id: 'r2', text: 'X*12', repeat: 1, note: '', startAt: 7 }], { method: 'spiral', start: 'ring' })
+      .rounds.map((info) => ({ info, hexes: info.stitches.map(() => '#E8833A') }));
+    const a = prepareRender(plain, { method: 'spiral', start: 'ring', stuffed: false }, true)!;
+    const b = prepareRender(shifted, { method: 'spiral', start: 'ring', stuffed: false }, true)!;
+    const first = (d: typeof a) => d.placements.find((p) => p.roundNo === 3 && p.index === 0)!.pos;
+    // The first stitch of round 3 sits on the far side when it starts at stitch 7 of 12.
+    const pa = first(a), pb = first(b);
+    expect(pa[0] * pb[0] + pa[2] * pb[2]).toBeLessThan(0);
+  });
 });

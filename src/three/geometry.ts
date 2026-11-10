@@ -200,13 +200,25 @@ function buildLathe(rounds: ShapeRound[], opts: ShapeOptions): BuiltShape {
   const w = new MeshWriter();
   const rings: BuiltShape['rings'] = new Map();
   const placements: Placement[] = [];
+  // A round that begins part-way round the one below turns its start by that much.
+  const shiftOf = new Map<number, number>();
+  {
+    let shift = 0;
+    let prevCount = 0;
+    rounds.forEach((r, idx) => {
+      if (r.info.startAt && prevCount) shift += (r.info.startAt - 1) / prevCount;
+      shiftOf.set(idx, shift);
+      prevCount = r.info.produced || prevCount;
+    });
+  }
   for (let i = 1; i < profile.length; i++) {
     const ri = profile[i].round;
+    const shift = shiftOf.get(ri) ?? 0;
     const round = rounds[ri];
     const count = round.info.stitches.length || 1;
     for (let j = 0; j < M; j++) {
       const t0 = j / M, t1 = (j + 1) / M;
-      const k = Math.min(count - 1, Math.floor(((j + 0.5) / M) * count));
+      const k = Math.min(count - 1, Math.floor(((((j + 0.5) / M - shift) % 1) + 1) % 1 * count));
       const rgb = hexToRgb(round.hexes[k] ?? '#cccccc');
       const a = ringPoint(i - 1, t0), b = ringPoint(i - 1, t1), c = ringPoint(i, t1), d = ringPoint(i, t0);
       w.quad([a.v, b.v, c.v, d.v], [a.n, b.n, c.n, d.n], rgb, round.info.no, k);
@@ -218,7 +230,7 @@ function buildLathe(rounds: ShapeRound[], opts: ShapeOptions): BuiltShape {
       round.info.stitches.forEach((st, k) => {
         const def = STITCH_BY_CODE[st.code];
         if (!def || def.shape === 'skip') return;
-        const t = (k + 0.5) / count + spiral * (ri % 2);
+        const t = (k + 0.5) / count + spiral * (ri % 2) + shift;
         const lo = ringPoint(i - 1, t), hi = ringPoint(i, t);
         const mid = [lo.v[0] * 0.45 + hi.v[0] * 0.55, lo.v[1] * 0.45 + hi.v[1] * 0.55, lo.v[2] * 0.45 + hi.v[2] * 0.55];
         const ahead = ringPoint(i, t + 0.5 / count).v, behind = ringPoint(i, t - 0.5 / count).v;

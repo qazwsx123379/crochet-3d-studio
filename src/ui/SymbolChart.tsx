@@ -71,6 +71,15 @@ export default function SymbolChart({ part, analysis, mode, selected, onPick }: 
   const ringR = (i: number) => CELL * 0.9 + i * CELL * 1.05;
   const outer = ringR(rounds.length) + straight / 2 + CELL;
   const size = outer * 2;
+  // Rounds that begin part-way round the one below are turned by that much.
+  const shifts: number[] = [];
+  {
+    let shift = 0;
+    rounds.forEach((r, i) => {
+      if (r.startAt && i > 0) shift += (r.startAt - 1) / Math.max(1, rounds[i - 1].produced);
+      shifts.push(shift);
+    });
+  }
   return (
     <div className="chart">
       <svg viewBox={`${-outer} ${-outer} ${size} ${size}`} width={Math.min(size, 900)} role="img" aria-label="繞圈符號圖">
@@ -85,7 +94,7 @@ export default function SymbolChart({ part, analysis, mode, selected, onPick }: 
                 let x: number, y: number, ang: number;
                 if (oval && ri === 0) { x = -straight / 2 + (k / Math.max(1, n - 1)) * straight; y = 0; ang = -90; }
                 else {
-                  const t = (k + 0.5) / n;
+                  const t = (k + 0.5) / n + shifts[ri];
                   const p = stadium(t, R, straight);
                   x = p.x; y = -p.z; ang = (Math.atan2(-p.nz, p.nx) * 180) / Math.PI;
                 }
