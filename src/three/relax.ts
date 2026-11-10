@@ -118,7 +118,8 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
     // after row bends the piece into a fan or ring (a collar); a single row
     // that suddenly doubles ruffles instead, so a median ignores it.
     const slopes = totals.slice(1).map((t, r) => (t - totals[r]) / heights[r + 1]).sort((a, b) => a - b);
-    const slope = !slopes.length ? 0 : slopes.length >= 4
+    // One growing row (an edging) ruffles; it takes at least two to bend the piece.
+    const slope = slopes.length < 2 ? 0 : slopes.length >= 4
       ? (slopes[(slopes.length - 1) >> 1] + slopes[slopes.length >> 1]) / 2
       : slopes.reduce((a, b) => a + b, 0) / slopes.length;
     const theta = Math.min(Math.PI * 1.9, Math.max(0, slope));

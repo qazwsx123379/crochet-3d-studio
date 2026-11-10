@@ -197,3 +197,42 @@ a { color: var(--accent); }
   .row-colors { grid-column: 2 / 4; }
   .row-start { grid-column: 1 / 4; }
 }
+
+/* ---------- 組裝 ---------- */
+.asm-page { height: 100dvh; display: flex; flex-direction: column; }
+.asm-page .topbar { gap: 10px; }
+.asm { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr) 300px; }
+.asm-left, .asm-right { overflow: auto; padding: 14px; background: var(--surface); }
+.asm-left { border-right: 1px solid var(--line); }
+.asm-right { border-left: 1px solid var(--line); }
+.asm-stage { position: relative; min-height: 0; background: var(--canvas, #fbfaf7); display: flex; flex-direction: column; }
+.asm-stage canvas { touch-action: none; }
+.asm-tools { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 2; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; pointer-events: none; }
+.asm-tools > * { pointer-events: auto; }
+.asm-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 2; background: var(--ink); color: var(--surface); border-radius: 999px; padding: 6px 14px; font-size: 13px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+.asm-hint.subtle { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+.asm-hint .btn { color: inherit; }
+.asm-list { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.asm-row { width: 100%; text-align: left; display: flex; gap: 6px; align-items: center; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.asm-row.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.asm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asm-add { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.asm-accs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+.asm-accs .st b { font-size: 18px; }
+.asm-accs .st.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.asm-panel { display: flex; flex-direction: column; gap: 10px; }
+.asm-panel h3 { margin: 0; font-family: var(--f-display); font-size: 18px; }
+.asm-panel h4 { margin: 8px 0 0; font-size: 14px; }
+.asm-grid { display: grid; grid-template-columns: 34px repeat(3, 1fr); gap: 6px; align-items: center; font-size: 12px; }
+.asm-num { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.asm-num input[type=number] { width: 100%; min-width: 0; max-width: 74px; height: 30px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; background: var(--surface); color: var(--ink); font: inherit; }
+.asm-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.asm-join { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.asm-join select, .asm-join input { height: 30px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; padding: 0 4px; }
+@media (max-width: 900px) {
+  .asm-page { height: auto; min-height: 100dvh; }
+  .asm { display: flex; flex-direction: column; }
+  .asm-stage { order: -1; height: 58vh; flex: none; }
+  .asm-left, .asm-right { border: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .asm-page .name-input { max-width: 40vw; }
+}

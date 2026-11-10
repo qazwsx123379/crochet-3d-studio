@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import Library, { WorkPage } from './ui/Library';
+import Library from './ui/Library';
+import { WorkPage } from './ui/Assembly';
 import Editor from './ui/Editor';
 import { useAuth, useStore } from './store/store';
 import Login from './ui/Login';

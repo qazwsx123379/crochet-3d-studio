@@ -29,7 +29,7 @@ interface Props {
 
 /* ---------- lighting: a soft studio environment, no downloads ---------- */
 
-function Studio() {
+export function Studio() {
   const { gl, scene } = useThree();
   useEffect(() => {
     const pmrem = new THREE.PMREMGenerator(gl);
@@ -43,7 +43,7 @@ function Studio() {
 
 /* ---------- yarn ---------- */
 
-function Yarn({ placements, onPick }: { placements: Placement[]; onPick: (p: Pick) => void }) {
+export function Yarn({ placements, onPick }: { placements: Placement[]; onPick?: (p: Pick) => void }) {
   const groups = useMemo(() => {
     const by = new Map<YarnKind, Placement[]>();
     for (const p of placements) {
@@ -57,7 +57,7 @@ function Yarn({ placements, onPick }: { placements: Placement[]; onPick: (p: Pic
   return <>{groups.map(([kind, list]) => <YarnGroup key={kind + list.length} kind={kind} list={list} material={material} onPick={onPick} />)}</>;
 }
 
-function YarnGroup({ kind, list, material, onPick }: { kind: YarnKind; list: Placement[]; material: THREE.Material; onPick: (p: Pick) => void }) {
+function YarnGroup({ kind, list, material, onPick }: { kind: YarnKind; list: Placement[]; material: THREE.Material; onPick?: (p: Pick) => void }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   useLayoutEffect(() => {
     const mesh = ref.current;
@@ -70,17 +70,17 @@ function YarnGroup({ kind, list, material, onPick }: { kind: YarnKind; list: Pla
     mesh.computeBoundingSphere();
   }, [list]);
   const click = (e: ThreeEvent<MouseEvent>) => {
-    if (e.delta > 4 || e.instanceId === undefined) return;
+    if (!onPick || e.delta > 4 || e.instanceId === undefined) return;
     e.stopPropagation();
     const p = list[e.instanceId];
     onPick({ roundNo: p.roundNo, index: p.index });
   };
-  return <instancedMesh ref={ref} args={[yarnGeometries()[kind], material, list.length]} onClick={click} />;
+  return <instancedMesh ref={ref} args={[yarnGeometries()[kind], material, list.length]} onClick={onPick ? click : undefined} />;
 }
 
 /* ---------- the fill surface ---------- */
 
-function Surface({ data, yarn, onPick }: { data: RenderData; yarn: boolean; onPick: (p: Pick) => void }) {
+export function Surface({ data, yarn, onPick }: { data: RenderData; yarn: boolean; onPick?: (p: Pick) => void }) {
   const geo = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
@@ -92,12 +92,12 @@ function Surface({ data, yarn, onPick }: { data: RenderData; yarn: boolean; onPi
   }, [data]);
   useEffect(() => () => geo.dispose(), [geo]);
   const click = (e: ThreeEvent<MouseEvent>) => {
-    if (e.delta > 4 || e.faceIndex == null) return;
+    if (!onPick || e.delta > 4 || e.faceIndex == null) return;
     e.stopPropagation();
     onPick({ roundNo: data.faceRound[e.faceIndex], index: data.faceStitch[e.faceIndex] });
   };
   return (
-    <mesh geometry={geo} onClick={click}>
+    <mesh geometry={geo} onClick={onPick ? click : undefined}>
       {yarn
         ? <meshStandardMaterial vertexColors roughness={1} metalness={0} side={THREE.DoubleSide} />
         : <meshPhysicalMaterial vertexColors roughness={0.85} metalness={0} sheen={0.6} sheenRoughness={0.8} sheenColor="#ffffff" side={THREE.DoubleSide} />}
