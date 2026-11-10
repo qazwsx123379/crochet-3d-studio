@@ -20,6 +20,9 @@ import ComboBuilder, { type ComboKind } from './ComboBuilder';
 
 const Preview3D = lazy(() => import('../three/Preview3D'));
 
+/** Above this many stitches the 3D view uses the smooth surface. */
+const YARN_LIMIT = 6000;
+
 const METHOD_LABEL = { spiral: '螺旋繞圈', joined: '每圈引拔', flat: '往返片織' } as const;
 const START_LABEL = { ring: '魔術環起針', chain: '鎖針起針' } as const;
 
@@ -83,14 +86,18 @@ export default function Editor({ partId }: { partId: string }) {
 
   useEffect(() => { if (part && !part.palette.some((c) => c.id === colorId)) setColorId(part.palette[0]?.id ?? ''); }, [part, colorId]);
 
+  // Real yarn everywhere, except for very large pieces where it would get slow.
+  const stitchTotal = analysis?.rounds.reduce((n, r) => n + (r.no <= shown ? r.stitches.length : 0), 0) ?? 0;
+  const tooMany = stitchTotal > YARN_LIMIT;
+  const useYarn = prefs.yarn && !tooMany;
   // The 3D rebuild runs in the gaps between keystrokes so typing never waits for it.
   const lazyPart = useDeferredValue(part);
   const lazyAnalysis = useDeferredValue(analysis);
   const shape = useMemo(() => {
     if (!lazyPart || !lazyAnalysis) return null;
     const rounds = lazyAnalysis.rounds.filter((r) => r.no <= shown && r.status !== 'syntax' && r.status !== 'empty').map((info) => ({ info, hexes: roundHexes(lazyPart, info) }));
-    return prepareRender(rounds, { method: lazyPart.settings.method, start: lazyPart.settings.start, stuffed: prefs.stuffed }, prefs.texture);
-  }, [lazyPart, lazyAnalysis, shown, prefs.stuffed, prefs.texture]);
+    return prepareRender(rounds, { method: lazyPart.settings.method, start: lazyPart.settings.start, stuffed: prefs.stuffed }, useYarn);
+  }, [lazyPart, lazyAnalysis, shown, prefs.stuffed, useYarn]);
 
   // Round-by-round playback.
   useEffect(() => {
@@ -276,7 +283,6 @@ export default function Editor({ partId }: { partId: string }) {
   const selRound = selected ? analysis.rounds.find((r) => r.no === selected.roundNo) : undefined;
   const selStitch = selRound?.stitches[selected!.index];
   const accent = (THEMES.find((t) => t.id === prefs.theme) ?? THEMES[0]).accent;
-  const anyTexture = prefs.texture;
 
   return (
     <div className="editor">
@@ -357,14 +363,17 @@ export default function Editor({ partId }: { partId: string }) {
           </div>
           <div className={`p3-view${prefs.background === 'transparent' ? ' transparent' : ''}`} >
             <Suspense fallback={<p className="muted" style={{ padding: 16 }}>3D 載入中…</p>}>
-              <Preview3D data={shape} flip={!!part.settings.flip} yarn={anyTexture} autoRotate={autoRotate} selected={selected} accent={accent} view={view} fitKey={partId} onPick={handlePick} />
+              <Preview3D data={shape} flip={!!part.settings.flip} yarn={useYarn} autoRotate={autoRotate} selected={selected} accent={accent} view={view} fitKey={partId} onPick={handlePick} />
             </Suspense>
             <div className="p3-badge">
-              {selRound && selStitch ? `選取：R${selRound.no} 第 ${selected!.index + 1} 針（${STITCH_BY_CODE[selStitch.code]?.name ?? selStitch.code}${selStitch.mod ? `・${selStitch.mod === 'BLO' ? '後半針' : '前半針'}` : ''}）` : shape ? '點 3D 上的針，織圖會跳到那一圈' : '寫下第一圈就會出現 3D'}
+              {selRound && selStitch ? `選取：R${selRound.no} 第 ${selected!.index + 1} 針（${STITCH_BY_CODE[selStitch.code]?.name ?? selStitch.code}${selStitch.mod ? `・${selStitch.mod === 'BLO' ? '後半針' : '前半針'}` : ''}）` : shape ? '點針可跳到那一圈・滾輪或雙指可放大看針目' : '寫下第一圈就會出現 3D'}
             </div>
             <div className="p3-toggles">
               <label><input type="checkbox" checked={prefs.stuffed} onChange={(e) => actions.setPrefs({ stuffed: e.target.checked })} style={{ accentColor: 'var(--accent)' }} /> 塞棉花</label>
-              <label title="手機上關掉比較順"><input type="checkbox" checked={prefs.texture} onChange={(e) => actions.setPrefs({ texture: e.target.checked })} style={{ accentColor: 'var(--accent)' }} /> 真實毛線</label>
+              <label title={tooMany ? `這個零件有 ${stitchTotal} 針，為了順暢先用平滑表面` : '關掉會改用平滑表面，比較省電'}>
+                <input type="checkbox" checked={useYarn} disabled={tooMany} onChange={(e) => actions.setPrefs({ yarn: e.target.checked })} style={{ accentColor: 'var(--accent)' }} /> 真實毛線
+              </label>
+              {tooMany && <span className="muted" style={{ fontSize: 11, background: 'var(--surface)', borderRadius: 6, padding: '2px 6px', maxWidth: 150 }}>超過 {YARN_LIMIT} 針，先用平滑表面</span>}
             </div>
           </div>
           <div className="p3-foot">

@@ -23,13 +23,12 @@ interface State {
 export const CLOUD = import.meta.env.MODE !== 'preview';
 
 const KEY = 'crochet-3d-studio/v1';
-const isPhone = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 899px)').matches;
 
 const defaultPrefs: Prefs = {
   theme: 'A',
   stitchOrder: STITCHES.map((s) => s.code),
   display: 'code',
-  texture: !isPhone,
+  yarn: true,
   stuffed: true,
   background: 'white',
   symbolColor: 'symbol',

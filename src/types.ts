@@ -51,8 +51,8 @@ export interface Prefs {
   /** Stitch button order, by code. */
   stitchOrder: string[];
   display: 'code' | 'chinese';
-  /** Per-stitch 3D texture; off by default on phones. */
-  texture: boolean;
+  /** Draw stitches as real yarn in 3D (a new key, so older saved settings don't switch it off). */
+  yarn: boolean;
   stuffed: boolean;
   background: 'white' | 'transparent';
   symbolColor: 'symbol' | 'cell';
