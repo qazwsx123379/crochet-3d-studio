@@ -24,13 +24,26 @@ function runs(seq: string[]): { code: string; n: number }[] {
   return out;
 }
 
+/**
+ * A sequence item is a stitch code, or a same-stitch group written out in
+ * brackets ("[2F]"), so a repeat can hold both: (X,[2F])*6.
+ */
+const isGroup = (item: string) => item.startsWith('[');
+export const groupToken = (codes: string[]) => `[${seqText(codes, true)}]`;
+
 /** Text for a sequence; `prefix` writes counts in front (3F) instead of behind (X*2). */
 function seqText(seq: string[], prefix: boolean): string {
-  return runs(seq).map(({ code, n }) => (n === 1 ? code : prefix ? `${n}${code}` : `${code}*${n}`)).join(',');
+  return runs(seq).map(({ code, n }) => (n === 1 ? code : prefix && !isGroup(code) ? `${n}${code}` : `${code}*${n}`)).join(',');
+}
+
+function itemName(item: string): string {
+  if (!isGroup(item)) return STITCH_BY_CODE[item]?.name ?? item;
+  const inner = parseRound(item).stitches.map((s) => s.code);
+  return `同一針（${runs(inner).map(({ code, n }) => `${STITCH_BY_CODE[code]?.name ?? code}${n > 1 ? ` ${n}` : ''}`).join('＋')}）`;
 }
 
 function seqWords(seq: string[]): string {
-  return runs(seq).map(({ code, n }) => `${STITCH_BY_CODE[code]?.name ?? code} ${n} 針`).join('、');
+  return runs(seq).map(({ code, n }) => (isGroup(code) ? `${itemName(code)}${n > 1 ? ` ×${n}` : ''}` : `${itemName(code)} ${n} 針`)).join('、');
 }
 
 export function buildCombo(kind: ComboKind, seq: string[], times: number, loop: 'BLO' | 'FLO'): string {
@@ -47,6 +60,8 @@ const EXAMPLES: { kind: ComboKind; seq: string[]; times: number; say: string }[]
   { kind: 'repeat', seq: ['X', 'V'], times: 6, say: '短針 1、加針 1，重複 6 次（圓片第 3 圈）' },
   { kind: 'repeat', seq: ['X', 'X', 'A'], times: 6, say: '短針 2、減針 1，重複 6 次（收口）' },
   { kind: 'repeat', seq: ['FV'], times: 6, say: '長針加針，重複 6 次' },
+  { kind: 'repeat', seq: ['X', '[2F]'], times: 6, say: '短針 1、同一針 2 長針，重複 6 次' },
+  { kind: 'repeat', seq: ['sk', '[5F]', 'sk', 'X'], times: 4, say: '貝殼花：跳 1、同一針 5 長針、跳 1、短針 1，重複 4 次' },
   { kind: 'same', seq: ['F', 'F', 'F'], times: 1, say: '同一針裡鉤 3 個長針' },
   { kind: 'same', seq: ['ch', 'ch', 'F'], times: 4, say: '同一針裡「2 鎖針＋1 長針」，做 4 次' },
   { kind: 'loop', seq: ['X'], times: 30, say: '只鉤後半針，短針 30 針（杯底轉角）' },
@@ -55,6 +70,10 @@ const EXAMPLES: { kind: ComboKind; seq: string[]; times: number; say: string }[]
 export default function ComboBuilder({ kind: initial, rowLabel, expected, onInsert, onClose }: Props) {
   const [kind, setKind] = useState<ComboKind>(initial);
   const [seq, setSeq] = useState<string[]>([]);
+  /** While not null, stitch taps build a same-stitch group to add to the sequence. */
+  const [draft, setDraft] = useState<string[] | null>(null);
+  const tap = (code: string) => (draft ? setDraft([...draft, code]) : setSeq((q) => [...q, code]));
+  const finishDraft = () => { if (draft?.length) setSeq((q) => [...q, groupToken(draft)]); setDraft(null); };
   const [times, setTimes] = useState(initial === 'same' ? 1 : 6);
   const [loop, setLoop] = useState<'BLO' | 'FLO'>('BLO');
   const closeRef = useRef(onClose);
@@ -70,7 +89,7 @@ export default function ComboBuilder({ kind: initial, rowLabel, expected, onInse
   const unit = useMemo(() => (seq.length ? parseRound(kind === 'same' ? `[${seqText(seq, true)}]` : seqText(seq, false)) : null), [seq, kind]);
 
   const intro = kind === 'repeat'
-    ? '依序點下面的針法，組成「一組」，再設定這組要重複幾次。'
+    ? '依序點下面的針法，組成「一組」，再設定這組要重複幾次。一組裡也可以放「同一針鉤多針」的群組。'
     : kind === 'same'
       ? '點下面的針法，這些針會全部鉤在「同一個針目」裡（例如 3 長針貝殼、2 鎖 1 長）。'
       : '選前半針或後半針，再點要這樣鉤的針法和針數。';
@@ -85,7 +104,7 @@ export default function ComboBuilder({ kind: initial, rowLabel, expected, onInse
         <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div className="seg" role="tablist" aria-label="組合方式" style={{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>
             <button aria-pressed={kind === 'repeat'} onClick={() => { setKind('repeat'); if (times === 1) setTimes(6); }}>重複一組</button>
-            <button aria-pressed={kind === 'same'} onClick={() => { setKind('same'); setTimes(1); }}>同一針鉤多針</button>
+            <button aria-pressed={kind === 'same'} onClick={() => { setKind('same'); setTimes(1); setDraft(null); setSeq((q) => q.filter((x) => !isGroup(x))); }}>同一針鉤多針</button>
             <button aria-pressed={kind === 'loop'} onClick={() => setKind('loop')}>只鉤前／後半針</button>
           </div>
           <p className="muted" style={{ margin: 0 }}>{intro}</p>
@@ -99,7 +118,7 @@ export default function ComboBuilder({ kind: initial, rowLabel, expected, onInse
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))', gap: 6 }}>
             {STITCHES.filter((s) => s.code !== 'sk' || kind === 'repeat').map((s) => (
-              <button key={s.code} className="st" style={{ height: 50 }} onClick={() => setSeq((q) => [...q, s.code])} title={s.name}>
+              <button key={s.code} className="st" style={{ height: 50, ...(draft ? { borderColor: 'var(--accent)' } : {}) }} onClick={() => tap(s.code)} title={s.name}>
                 <b>{s.code}</b><span>{s.short}</span>
               </button>
             ))}
@@ -111,11 +130,23 @@ export default function ComboBuilder({ kind: initial, rowLabel, expected, onInse
               {seq.length === 0 && <span className="muted" style={{ fontSize: 13 }}>還沒選針法，點上面的按鈕加入</span>}
               {runs(seq).map((r, i) => (
                 <button key={i} className="chip" title="點一下移除" onClick={() => setSeq((q) => { const idx = runs(q).slice(0, i).reduce((n, x) => n + x.n, 0); const copy = [...q]; copy.splice(idx, 1); return copy; })}>
-                  {STITCH_BY_CODE[r.code]?.name}{r.n > 1 ? ` ×${r.n}` : ''} ✕
+                  {itemName(r.code)}{r.n > 1 ? ` ×${r.n}` : ''} ✕
                 </button>
               ))}
               {seq.length > 0 && <button className="btn ghost sm" onClick={() => setSeq([])}>清除</button>}
             </div>
+            {kind !== 'same' && (draft ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', border: '1.5px dashed var(--accent)', borderRadius: 10, padding: '8px 10px', background: 'var(--surface)' }}>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>同一針裡：</span>
+                {draft.length === 0 && <span className="muted" style={{ fontSize: 13 }}>點上面的針法，例如點兩次「長針」</span>}
+                {runs(draft).map((r, i) => <span key={i} className="chip" style={{ display: 'inline-flex', alignItems: 'center' }}>{itemName(r.code)}{r.n > 1 ? ` ×${r.n}` : ''}</span>)}
+                <span className="spacer" />
+                <button className="btn sm" onClick={() => setDraft(null)}>取消</button>
+                <button className="btn sm pri" disabled={!draft.length} onClick={finishDraft}>加入這個群組</button>
+              </div>
+            ) : (
+              <button className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => setDraft([])} title="例如短針 1、同一針 2 長針，重複 6 次 → (X,[2F])*6">＋ 加入「同一針」群組</button>
+            ))}
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
               {kind === 'same' ? '這樣做' : kind === 'loop' && seq.length === 1 ? '針數' : '重複'}
               <button className="btn icon sm" aria-label="減少" onClick={() => setTimes((t) => Math.max(1, t - 1))}>−</button>
@@ -149,7 +180,7 @@ export default function ComboBuilder({ kind: initial, rowLabel, expected, onInse
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
               {EXAMPLES.map((ex) => (
                 <button key={ex.say} className="btn" style={{ justifyContent: 'space-between', height: 'auto', padding: '8px 12px', textAlign: 'left' }}
-                  onClick={() => { setKind(ex.kind); setSeq(ex.seq); setTimes(ex.times); setLoop('BLO'); }}>
+                  onClick={() => { setKind(ex.kind); setSeq(ex.seq); setTimes(ex.times); setLoop('BLO'); setDraft(null); }}>
                   <span>{ex.say}</span><code style={{ fontFamily: 'var(--f-mono)' }}>{buildCombo(ex.kind, ex.seq, ex.times, 'BLO')}</code>
                 </button>
               ))}
