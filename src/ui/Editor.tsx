@@ -4,7 +4,7 @@ import type { PatternRow, RoundInfo } from '../pattern/analyze';
 import { analyze } from '../pattern/analyze';
 import { roundColorIds, roundHexes, roundKey, stitchKey } from '../pattern/colors';
 import { STITCHES, STITCH_BY_CODE } from '../pattern/stitches';
-import { buildShape } from '../three/geometry';
+import { prepareRender } from '../three/render';
 import type { Pick, ViewName } from '../three/Preview3D';
 import { THEMES } from '../themes';
 import { actions, useSaveStatus, useStore } from '../store/store';
@@ -89,8 +89,8 @@ export default function Editor({ partId }: { partId: string }) {
   const shape = useMemo(() => {
     if (!lazyPart || !lazyAnalysis) return null;
     const rounds = lazyAnalysis.rounds.filter((r) => r.no <= shown && r.status !== 'syntax' && r.status !== 'empty').map((info) => ({ info, hexes: roundHexes(lazyPart, info) }));
-    return buildShape(rounds, { method: lazyPart.settings.method, start: lazyPart.settings.start, stuffed: prefs.stuffed });
-  }, [lazyPart, lazyAnalysis, shown, prefs.stuffed]);
+    return prepareRender(rounds, { method: lazyPart.settings.method, start: lazyPart.settings.start, stuffed: prefs.stuffed }, prefs.texture);
+  }, [lazyPart, lazyAnalysis, shown, prefs.stuffed, prefs.texture]);
 
   // Round-by-round playback.
   useEffect(() => {
@@ -357,14 +357,14 @@ export default function Editor({ partId }: { partId: string }) {
           </div>
           <div className={`p3-view${prefs.background === 'transparent' ? ' transparent' : ''}`} style={prefs.background === 'white' ? { background: '#FFFFFF' } : undefined}>
             <Suspense fallback={<p className="muted" style={{ padding: 16 }}>3D 載入中…</p>}>
-              <Preview3D shape={shape} flip={!!part.settings.flip} texture={anyTexture} autoRotate={autoRotate} selected={selected} accent={accent} view={view} fitKey={partId} onPick={handlePick} />
+              <Preview3D data={shape} flip={!!part.settings.flip} yarn={anyTexture} autoRotate={autoRotate} selected={selected} accent={accent} view={view} fitKey={partId} onPick={handlePick} />
             </Suspense>
             <div className="p3-badge">
               {selRound && selStitch ? `選取：R${selRound.no} 第 ${selected!.index + 1} 針（${STITCH_BY_CODE[selStitch.code]?.name ?? selStitch.code}${selStitch.mod ? `・${selStitch.mod === 'BLO' ? '後半針' : '前半針'}` : ''}）` : shape ? '點 3D 上的針，織圖會跳到那一圈' : '寫下第一圈就會出現 3D'}
             </div>
             <div className="p3-toggles">
               <label><input type="checkbox" checked={prefs.stuffed} onChange={(e) => actions.setPrefs({ stuffed: e.target.checked })} style={{ accentColor: 'var(--accent)' }} /> 塞棉花</label>
-              <label title="手機上關掉比較順"><input type="checkbox" checked={prefs.texture} onChange={(e) => actions.setPrefs({ texture: e.target.checked })} style={{ accentColor: 'var(--accent)' }} /> 針目紋理</label>
+              <label title="手機上關掉比較順"><input type="checkbox" checked={prefs.texture} onChange={(e) => actions.setPrefs({ texture: e.target.checked })} style={{ accentColor: 'var(--accent)' }} /> 真實毛線</label>
             </div>
           </div>
           <div className="p3-foot">

@@ -1,0 +1,240 @@
+/**
+ * Stitch-level relaxation for rounds (amigurumi). The lathe shape from
+ * geometry.ts is only the starting guess; here every stitch becomes a point
+ * tied to its neighbours in the round (one stitch width apart) and to the
+ * stitch(es) it was worked into (one stitch height apart). Letting those ties
+ * settle gives the faceted increase lines and soft bulges real pieces have,
+ * which a perfect surface of revolution cannot show. With stuffing, a gentle
+ * outward pressure fills the shape out.
+ */
+import { STITCH_BY_CODE } from '../pattern/stitches';
+import type { BuiltShape, Placement, ShapeOptions, ShapeRound } from './geometry';
+
+type V3 = [number, number, number];
+
+export interface RelaxedShape {
+  placements: Placement[];
+  /** Indexed fill surface between stitches (the yarn sits on top of it). */
+  fill: { positions: Float32Array; colors: Float32Array; index: Uint32Array; faceRound: Int32Array; faceStitch: Int32Array };
+  rings: Map<number, V3[]>;
+  center: V3;
+  radius: number;
+}
+
+interface Node { p: V3; round: number; roundNo: number; index: number; parents: number[]; hex: string; height: number; produces: number; placement?: Placement }
+
+const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const mul = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k];
+const len = (a: V3) => Math.hypot(a[0], a[1], a[2]);
+const norm = (a: V3): V3 => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+function hexDarken(hex: string, k: number): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return [lin((n >> 16) & 255) * k, lin((n >> 8) & 255) * k, lin(n & 255) * k];
+}
+
+export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOptions & { fillShade: number }): RelaxedShape | null {
+  if (base.kind !== 'lathe' || !base.placements.length) return null;
+
+  // ---- nodes: the top of every stitch, starting from the lathe guess ----
+  const nodes: Node[] = [];
+  const byRound = new Map<number, number[]>();
+  const placementIndex = new Map<string, Placement>();
+  for (const p of base.placements) placementIndex.set(`${p.roundNo}:${p.index}`, p);
+  const usable = rounds.filter((r) => r.info.stitches.length > 0);
+  const roundIdx = new Map(usable.map((r, i) => [r.info.no, i]));
+
+  // A centre point for magic-ring starts (round 1 is worked into it).
+  const firstNo = base.placements[0].roundNo;
+  const ringStart = opts.start === 'ring';
+  let centerId = -1;
+  if (ringStart) {
+    const first = base.placements.filter((p) => p.roundNo === firstNo);
+    const c = mul(first.reduce<V3>((s, p) => add(s, sub(p.pos, mul(p.up, p.height * 0.5))), [0, 0, 0]), 1 / first.length);
+    centerId = nodes.push({ p: c, round: -1, roundNo: 0, index: 0, parents: [], hex: first[0].hex, height: 0, produces: 0 }) - 1;
+  }
+
+  let prevSlots: number[] = [];
+  for (const r of usable) {
+    const ids: number[] = [];
+    const slots: number[] = [];
+    let ptr = 0;
+    let lastGroup: number | undefined;
+    let groupParents: number[] = [];
+    const take = (n: number): number[] => {
+      if (!prevSlots.length) return ringStart && centerId >= 0 && !byRound.size ? [centerId] : [];
+      const out: number[] = [];
+      for (let k = 0; k < n; k++) out.push(prevSlots[(ptr + k) % prevSlots.length]);
+      ptr += n;
+      return [...new Set(out)];
+    };
+    r.info.stitches.forEach((st, k) => {
+      const def = STITCH_BY_CODE[st.code];
+      if (!def) return;
+      let parents: number[];
+      if (st.group !== undefined && st.group === lastGroup) parents = groupParents;
+      else if (st.group !== undefined) {
+        // [ … ] uses one stitch of the round below for the whole group.
+        const groupConsumes = r.info.stitches.some((s) => s.group === st.group && STITCH_BY_CODE[s.code]?.consumes) ? 1 : 0;
+        parents = take(groupConsumes);
+        groupParents = parents;
+      } else parents = take(def.consumes);
+      lastGroup = st.group;
+      const pl = placementIndex.get(`${r.info.no}:${k}`);
+      if (!pl) return; // a skipped stitch leaves no stitch of its own
+      const top = add(pl.pos, mul(pl.up, pl.height * 0.45));
+      const id = nodes.push({ p: top, round: roundIdx.get(r.info.no)!, roundNo: r.info.no, index: k, parents: parents.length ? parents : (prevSlots.length ? [] : ringStart ? [centerId] : []), hex: pl.hex, height: Math.max(0.4, def.height), produces: def.produces, placement: pl }) - 1;
+      ids.push(id);
+      for (let q = 0; q < def.produces; q++) slots.push(id);
+    });
+    if (ids.length) byRound.set(r.info.no, ids);
+    if (slots.length) prevSlots = slots;
+  }
+  if (!byRound.size) return null;
+
+  // ---- constraints ----
+  type Link = [number, number, number, number]; // a, b, rest length, stiffness
+  const links: Link[] = [];
+  const roundLists = [...byRound.values()];
+  for (const ids of roundLists) {
+    const n = ids.length;
+    for (let k = 0; k < n; k++) {
+      if (n < 2) break;
+      const a = ids[k], b = ids[(k + 1) % n];
+      if (k === n - 1 && n < 3) break;
+      // An increase makes two stitches on top, so it is two stitch widths wide.
+      const widths = (Math.max(0.5, nodes[a].produces) + Math.max(0.5, nodes[b].produces)) / 2;
+      const w = (len(sub(nodes[a].placement!.pos, nodes[b].placement!.pos)) + widths) / 2; // between the guess and the true width
+      links.push([a, b, w, 0.7]);
+    }
+  }
+  // Ties to the stitch below: halfway between the guess and the true stitch height, and softer,
+  // so increases show their facets without the fabric buckling.
+  for (let i = 0; i < nodes.length; i++) for (const par of nodes[i].parents) {
+    const guess = len(sub(nodes[i].p, nodes[par].p));
+    links.push([i, par, guess * 0.5 + nodes[i].height * 0.5, 0.45]);
+  }
+
+  // ---- settle ----
+  const P = nodes.map((n) => [...n.p] as V3);
+  const closed = opts.stuffed && roundLists.length > 3 && roundLists[roundLists.length - 1].length <= Math.max(8, roundLists.reduce((m, l) => Math.max(m, l.length), 0) * 0.5);
+  const iterations = Math.min(90, Math.max(30, Math.round(120000 / Math.max(1, links.length))));
+  for (let it = 0; it < iterations; it++) {
+    // Keep rounds smooth so the fabric doesn't crumple.
+    for (const ids of roundLists) {
+      const n = ids.length;
+      if (n < 3) continue;
+      for (let k = 0; k < n; k++) {
+        const a = P[ids[(k + n - 1) % n]], b = P[ids[(k + 1) % n]], c = P[ids[k]];
+        for (let d = 0; d < 3; d++) c[d] += ((a[d] + b[d]) / 2 - c[d]) * 0.04;
+      }
+    }
+    // The magic ring stays in the middle of the first round.
+    if (centerId >= 0 && roundLists[0]) {
+      const r1 = roundLists[0];
+      P[centerId] = mul(r1.reduce<V3>((s, i) => add(s, P[i]), [0, 0, 0]), 1 / r1.length);
+    }
+    if (closed) {
+      const C = mul(P.reduce<V3>((s, p) => add(s, p), [0, 0, 0]), 1 / P.length);
+      for (const p of P) { const d = norm(sub(p, C)); for (let k = 0; k < 3; k++) p[k] += d[k] * 0.025; }
+    }
+    for (const [a, b, rest, stiff] of links) {
+      const pa = P[a], pb = P[b];
+      const d = sub(pb, pa);
+      const l = len(d) || 1e-6;
+      const corr = ((l - rest) / l) * 0.5 * stiff;
+      for (let k = 0; k < 3; k++) { pa[k] += d[k] * corr; pb[k] -= d[k] * corr; }
+    }
+  }
+
+  // ---- rebuild placements from the settled points ----
+  const C = mul(P.reduce<V3>((s, p) => add(s, p), [0, 0, 0]), 1 / P.length);
+  const placements: Placement[] = [];
+  const rings = new Map<number, V3[]>();
+  for (const ids of roundLists) {
+    const n = ids.length;
+    rings.set(nodes[ids[0]].roundNo, [...ids.map((i) => P[i]), P[ids[0]]]);
+    ids.forEach((id, k) => {
+      const node = nodes[id];
+      const pl = node.placement!;
+      const top = P[id];
+      const bottom = node.parents.length ? mul(node.parents.reduce<V3>((s, q) => add(s, P[q]), [0, 0, 0]), 1 / node.parents.length) : sub(top, mul(pl.up, pl.height * 0.9));
+      const upVec = sub(top, bottom);
+      const height = Math.max(0.3, len(upVec));
+      const up = norm(upVec);
+      const prev = P[ids[(k + n - 1) % n]], next = P[ids[(k + 1) % n]];
+      let tangent = n > 1 ? norm(sub(next, prev)) : pl.tangent;
+      const pos = add(bottom, mul(upVec, 0.5));
+      let normal = norm(cross(tangent, up));
+      if (dot(normal, sub(pos, C)) < 0 && dot(pl.normal, normal) < 0) normal = mul(normal, -1);
+      tangent = norm(cross(up, normal));
+      const width = n > 1 ? Math.max(0.35, (len(sub(next, top)) + len(sub(top, prev))) / 2) : pl.width;
+      placements.push({ ...pl, pos, up, normal, tangent, width, height });
+    });
+  }
+
+  // ---- fill surface: each stitch's top to the stitch(es) below ----
+  const pos: number[] = [], col: number[] = [], idx: number[] = [], fr: number[] = [], fs: number[] = [];
+  const vert = new Map<number, number>();
+  const v = (id: number) => {
+    let i = vert.get(id);
+    if (i === undefined) {
+      i = pos.length / 3;
+      pos.push(...P[id]);
+      col.push(...hexDarken(nodes[id].hex, opts.fillShade));
+      vert.set(id, i);
+    }
+    return i;
+  };
+  const tri = (a: number, b: number, c: number, owner: number) => { idx.push(v(a), v(b), v(c)); fr.push(nodes[owner].roundNo); fs.push(nodes[owner].index); };
+  const prevOrder = new Map<number, number>(); // node id → position in its round
+  for (const ids of roundLists) ids.forEach((id, k) => prevOrder.set(id, k));
+  for (let r = 0; r < roundLists.length; r++) {
+    const ids = roundLists[r];
+    const n = ids.length;
+    const below = r > 0 ? roundLists[r - 1] : null;
+    for (let k = 0; k < n; k++) {
+      const a = ids[k], b = ids[(k + 1) % n];
+      if (k === n - 1 && n < 3) break;
+      const pa = nodes[a].parents[0], pb = nodes[b].parents[0];
+      if (pa === undefined || pb === undefined) continue;
+      tri(a, b, pa, b);
+      if (pa === pb) continue;
+      if (below && prevOrder.has(pa) && prevOrder.has(pb) && pa !== centerId) {
+        // Walk the round below from pa to pb so decreases leave no holes.
+        const m = below.length;
+        let i = prevOrder.get(pa)!;
+        const end = prevOrder.get(pb)!;
+        let guard = 0;
+        while (i !== end && guard++ < m) { const j = (i + 1) % m; tri(b, below[j], below[i], b); i = j; }
+      } else tri(b, pb, pa, b);
+    }
+  }
+  // Close a top that was decreased shut.
+  const last = roundLists[roundLists.length - 1];
+  if (roundLists.length > 3 && last.length <= 8) {
+    const apexP = mul(last.reduce<V3>((s, i) => add(s, P[i]), [0, 0, 0]), 1 / last.length);
+    const apex = nodes.push({ p: apexP, round: -2, roundNo: nodes[last[0]].roundNo, index: 0, parents: [], hex: nodes[last[0]].hex, height: 0, produces: 0 }) - 1;
+    P.push(apexP);
+    for (let k = 0; k < last.length; k++) tri(apex, last[(k + 1) % last.length], last[k], last[k]);
+  }
+  // Make the fill face outwards.
+  let score = 0;
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = pos.slice(idx[t] * 3, idx[t] * 3 + 3) as V3, b = pos.slice(idx[t + 1] * 3, idx[t + 1] * 3 + 3) as V3, c = pos.slice(idx[t + 2] * 3, idx[t + 2] * 3 + 3) as V3;
+    score += dot(cross(sub(b, a), sub(c, a)), sub(a, C));
+  }
+  if (score < 0) for (let t = 0; t < idx.length; t += 3) { const s = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = s; }
+
+  let min: V3 = [Infinity, Infinity, Infinity], max: V3 = [-Infinity, -Infinity, -Infinity];
+  for (const p of P) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], p[k]); max[k] = Math.max(max[k], p[k]); }
+  const center: V3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+  return {
+    placements, rings, center, radius: Math.max(1, len(sub(max, min)) / 2),
+    fill: { positions: new Float32Array(pos), colors: new Float32Array(col), index: new Uint32Array(idx), faceRound: new Int32Array(fr), faceStitch: new Int32Array(fs) },
+  };
+}
