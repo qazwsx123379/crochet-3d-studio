@@ -9,11 +9,13 @@ interface Props {
   onSave: (p: Part) => void;
   onClose: () => void;
   usage: Record<string, number>;
+  /** First time for a new part: ask how it starts before anything else. */
+  fresh?: boolean;
 }
 
 const HOOKS = [2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
 
-export default function PartSettingsDialog({ part, focus, onSave, onClose, usage }: Props) {
+export default function PartSettingsDialog({ part, focus, onSave, onClose, usage, fresh }: Props) {
   const [draft, setDraft] = useState<Part>(() => structuredClone(part));
   const [picker, setPicker] = useState(false);
   const s = draft.settings;
@@ -43,9 +45,10 @@ export default function PartSettingsDialog({ part, focus, onSave, onClose, usage
     <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <section className="dialog" role="dialog" aria-modal="true" aria-label="零件設定">
         <div className="dialog-head">
-          <h2>零件設定・{part.name}</h2>
+          <h2>{fresh ? '新零件：先選怎麼開始' : `零件設定・${part.name}`}</h2>
           <button className="btn ghost icon" aria-label="關閉" onClick={onClose}>✕</button>
         </div>
+        {fresh && <p style={{ margin: '14px 24px 0', fontSize: 14 }} className="muted">玩偶、帽子通常用「魔術環」從中心往外繞圈；鞋底、橢圓或片織用「鎖針起針」。之後隨時可以在上方的設定列或「零件設定」修改。</p>}
         <div className="dialog-body">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="field"><label htmlFor="pname">名稱</label><input id="pname" className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></div>
@@ -114,7 +117,7 @@ export default function PartSettingsDialog({ part, focus, onSave, onClose, usage
         </div>
         <div className="dialog-foot">
           <button className="btn" onClick={onClose}>取消</button>
-          <button className="btn pri" onClick={() => onSave(draft)}>儲存</button>
+          <button className="btn pri" onClick={() => onSave(draft)}>{fresh ? '開始寫織圖' : '儲存'}</button>
         </div>
       </section>
     </div>

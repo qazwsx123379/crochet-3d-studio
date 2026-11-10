@@ -7,7 +7,7 @@ import { STITCHES, STITCH_BY_CODE } from '../pattern/stitches';
 import { prepareRender } from '../three/render';
 import type { Pick, ViewName } from '../three/Preview3D';
 import { THEMES } from '../themes';
-import { actions, useSaveStatus, useStore } from '../store/store';
+import { actions, clearFreshPart, isFreshPart, useSaveStatus, useStore } from '../store/store';
 import { newId } from '../store/yarns';
 import { useHistory } from './useHistory';
 import StitchPanel, { type PaintTool } from './StitchPanel';
@@ -74,7 +74,9 @@ export default function Editor({ partId }: { partId: string }) {
   const [autoRotate, setAutoRotate] = useState(false);
   const [upTo, setUpTo] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [dialog, setDialog] = useState<null | 'settings' | 'palette' | 'import'>(null);
+  // A part just created opens on its settings, so the start (magic ring or chain) is chosen first.
+  const [fresh] = useState(() => isFreshPart(partId));
+  const [dialog, setDialog] = useState<null | 'settings' | 'palette' | 'import'>(fresh ? 'settings' : null);
   const [combo, setCombo] = useState<ComboKind | null>(null);
   const [toast, setToast] = useState('');
   const segAnchor = useRef<Pick | null>(null);
@@ -359,7 +361,7 @@ export default function Editor({ partId }: { partId: string }) {
             )}
             <div className="spacer" />
             {analysis.problems > 0 && <span className="tag" style={{ background: 'var(--warn-soft)', color: 'var(--warn)' }}>{analysis.problems} 圈針數不對</span>}
-            <span className="muted hide-phone" style={{ fontSize: 13 }}>{METHOD_LABEL[part.settings.method]}・{START_LABEL[part.settings.start]}・{part.settings.yarn}・{part.settings.hook.toFixed(1)} mm</span>
+            <button className="btn ghost sm" onClick={() => setDialog('settings')} title="改織法、起針、線材" style={{ fontSize: 13, color: 'var(--muted)' }}>{METHOD_LABEL[part.settings.method]}・{START_LABEL[part.settings.start]}・{part.settings.yarn}・{part.settings.hook.toFixed(1)} mm ✎</button>
           </div>
           {showChart ? (
             <SymbolChart part={part} analysis={analysis} mode={prefs.symbolColor} selected={selected} onPick={handlePick} />
@@ -418,7 +420,19 @@ export default function Editor({ partId }: { partId: string }) {
       {toast && <div role="status" style={{ position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', background: 'var(--ink)', color: 'var(--surface)', padding: '8px 16px', borderRadius: 10, fontSize: 14, zIndex: 60 }}>{toast}</div>}
 
       {(dialog === 'settings' || dialog === 'palette') && (
-        <PartSettingsDialog part={part} focus={dialog} usage={usage} onClose={() => setDialog(null)} onSave={(p) => { update(() => p); setDialog(null); }} />
+        <PartSettingsDialog part={part} focus={dialog} usage={usage} fresh={fresh && !hist.canUndo} onClose={() => { clearFreshPart(partId); setDialog(null); }} onSave={(p) => {
+          clearFreshPart(partId);
+          // Switching the start swaps the untouched first round to match (6X ↔ ch10).
+          let next = p;
+          const first = p.rows[0];
+          if (p.rows.length === 1 && first && p.settings.start !== part.settings.start) {
+            if (p.settings.start === 'chain' && first.text.trim() === '6X') next = { ...p, rows: [{ ...first, text: 'ch10' }] };
+            if (p.settings.start === 'ring' && first.text.trim() === 'ch10') next = { ...p, rows: [{ ...first, text: '6X' }] };
+          }
+          update(() => next);
+          setDialog(null);
+          if (next !== p) setToast(next.settings.start === 'chain' ? '第一圈改成 ch10（10 個鎖針），可以直接修改數量' : '第一圈改成 6X（魔術環 6 短針）');
+        }} />
       )}
       {combo && (
         <ComboBuilder kind={combo} expected={analysis.rounds.find((x) => x.rowId === targetRow()?.id && x.inRow === 0)?.expected} rowLabel={(() => { const r = analysis.rows.find((x) => x.row.id === targetRow()?.id); return r ? (r.first === r.last ? `R${r.first}` : `R${r.first}–${r.last}`) : '這一圈'; })()}

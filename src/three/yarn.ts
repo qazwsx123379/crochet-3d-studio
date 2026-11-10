@@ -60,17 +60,18 @@ function fanStitch(): THREE.BufferGeometry {
 }
 
 /** A chain loop lying along the round. */
+/** A chain: a small, flat, elongated loop lying along the round, like a link in a chain. */
 function chainStitch(): THREE.BufferGeometry {
-  const g = new THREE.TorusGeometry(0.3, R * 0.9, 6, 16);
-  g.scale(1.25, 0.75, 1);
-  g.translate(0, 0.1, 0.1);
+  const g = new THREE.TorusGeometry(0.27, R * 0.7, 6, 18);
+  g.scale(1.75, 0.72, 0.7);
+  g.translate(0, 0, 0.06);
   return g;
 }
 
 /** Picot: a small upright ring. */
 function picotStitch(): THREE.BufferGeometry {
-  const g = new THREE.TorusGeometry(0.22, R * 0.8, 6, 14);
-  g.translate(0, 0.45, 0.12);
+  const g = new THREE.TorusGeometry(0.17, R * 0.65, 6, 14);
+  g.translate(0, 0.25, 0.08);
   return g;
 }
 
@@ -162,5 +163,13 @@ export function yarnMatrix(p: Placement, m: THREE.Matrix4) {
   // Depth follows the width so the yarn keeps a round cross-section; a little
   // extra height lets each stitch tuck into the one below, as real fabric does.
   const pos = new THREE.Vector3(...p.pos).addScaledVector(new THREE.Vector3(...p.normal), 0.04 * w);
+  if (p.shape === 'chain' || p.shape === 'picot' || p.shape === 'slip') {
+    // Low stitches keep their own size instead of stretching to the round's height,
+    // and sit near the top of the round, where they are worked.
+    const s = Math.min(w, 1.2);
+    pos.addScaledVector(new THREE.Vector3(...p.up), Math.max(0, p.height / 2 - s * 0.3));
+    m.compose(pos, tmpQ, new THREE.Vector3(s, s, s));
+    return;
+  }
   m.compose(pos, tmpQ, new THREE.Vector3(w * 1.06, Math.max(0.3, p.height) * 1.22, w));
 }

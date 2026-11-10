@@ -112,6 +112,19 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
       links.push([a, b, w, 0.7]);
     }
   }
+  // Chains aren't worked into the round below; tie them loosely to their nearest
+  // anchored neighbour's base so chain arches stay close to the fabric.
+  for (const ids of roundLists) {
+    ids.forEach((id, k) => {
+      if (nodes[id].parents.length) return;
+      for (let d = 1; d < ids.length; d++) {
+        const nb = nodes[ids[(k - d + ids.length) % ids.length]].parents.length ? ids[(k - d + ids.length) % ids.length] : nodes[ids[(k + d) % ids.length]].parents.length ? ids[(k + d) % ids.length] : -1;
+        if (nb < 0) continue;
+        for (const par of nodes[nb].parents) links.push([id, par, len(sub(nodes[id].p, nodes[par].p)), 0.2]);
+        break;
+      }
+    });
+  }
   // Ties to the stitch below: halfway between the guess and the true stitch height, and softer,
   // so increases show their facets without the fabric buckling.
   for (let i = 0; i < nodes.length; i++) for (const par of nodes[i].parents) {

@@ -235,6 +235,11 @@ export function useStore<T>(select: (s: State) => T): T {
 
 export const getState = () => state;
 
+/** Parts created in this visit whose settings haven't been chosen yet (the editor asks first). */
+const freshParts = new Set<string>();
+export const isFreshPart = (id: string) => freshParts.has(id);
+export const clearFreshPart = (id: string) => { freshParts.delete(id); };
+
 export const actions = {
   savePart(part: Part) {
     set({ ...state, parts: { ...state.parts, [part.id]: { ...part, updatedAt: Date.now() } } });
@@ -249,6 +254,7 @@ export const actions = {
       stitchColors: {}, roundColors: {},
     };
     set({ ...state, parts: { ...state.parts, [id]: part } });
+    freshParts.add(id);
     return part;
   },
   duplicatePart(id: string): Part | undefined {
