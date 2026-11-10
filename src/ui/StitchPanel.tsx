@@ -88,6 +88,7 @@ export default function StitchPanel({ onStitch, onCombo, palette, color, onColor
         {palette.map((c) => (
           <button key={c.id} className="swatch" style={{ background: c.hex }} aria-pressed={c.id === color} aria-label={c.name} title={`${c.name}${c.brand ? `・${c.brand}` : ''}`} onClick={() => onColor(c.id)} />
         ))}
+        <button className="swatch" onClick={onEditPalette} aria-label="新增顏色" title="新增或修改顏色" style={{ background: 'var(--surface)', border: '1px dashed var(--dashed)', color: 'var(--muted)', fontSize: 20 }}>＋</button>
       </div>
       {current && <div className="muted" style={{ fontSize: 13 }}>目前：<b style={{ color: 'var(--ink)' }}>{current.name}</b>{current.brand && `・${current.brand} ${current.code || '色號待補'}`}</div>}
       <div className="seg" role="group" aria-label="上色方式" style={{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>

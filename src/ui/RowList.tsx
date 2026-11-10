@@ -19,6 +19,9 @@ interface Props {
   /** Paint stitches [from, to] of every round in the row; `round` paints the whole round. */
   onStripPaint: (rowId: string, from: number, to: number) => void;
   paintActive: boolean;
+  /** Paint every round of this row with the current colour. */
+  onPaintRow: (rowId: string) => void;
+  currentColor: { name: string; hex: string } | undefined;
 }
 
 /** Lets the box be empty while typing; the number is applied when it is valid and tidied on blur. */
@@ -100,6 +103,12 @@ export default function RowList(p: Props) {
               </div>
               <div className={`row-count${bad ? ' bad' : ''}`}>{info.status === 'syntax' || info.status === 'empty' ? '—' : `(${info.produced})`}</div>
               <div className="row-tools">
+                {p.currentColor && n > 0 && (
+                  <button title={`這一圈換成「${p.currentColor.name}」`} aria-label={`這一圈換成${p.currentColor.name}`} onClick={() => p.onPaintRow(row.id)}
+                    style={{ width: 'auto', padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: 3, background: p.currentColor.hex, border: '1px solid var(--line)' }} />整圈
+                  </button>
+                )}
                 <button title="備註" aria-label="備註" onClick={() => setNotes((s) => new Set(s).add(row.id))}>✎</button>
                 <button title="複製這一行到下方" aria-label="複製這一行" onClick={() => p.onDuplicate(row.id)}>⧉</button>
                 <button title="上移" aria-label="上移" onClick={() => p.onMove(row.id, -1)}>↑</button>

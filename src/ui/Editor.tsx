@@ -239,6 +239,20 @@ export default function Editor({ partId }: { partId: string }) {
     }
   };
 
+  /** Choosing a colour switches straight to painting, so the next tap colours a stitch. */
+  const pickColor = (id: string) => {
+    setColorId(id);
+    if (tool === 'select') setTool('stitch');
+    const c = part?.palette.find((x) => x.id === id);
+    if (c) setToast(`已選「${c.name}」：點 3D 或符號圖上的針上色；或按每一行的「整圈」`);
+  };
+  const paintRow = (rowId: string) => {
+    if (!analysis) return;
+    paintRound(analysis.rounds.filter((r) => r.rowId === rowId));
+    const c = part?.palette.find((x) => x.id === colorId);
+    if (c) setToast(`已把這一圈換成「${c.name}」`);
+  };
+
   const stripPaint = (rowId: string, from: number, to: number) => {
     if (!analysis) return;
     const rounds = analysis.rounds.filter((r) => r.rowId === rowId);
@@ -318,7 +332,7 @@ export default function Editor({ partId }: { partId: string }) {
       </div>
 
       <div className="ed-body" data-tab={tab}>
-        <StitchPanel onStitch={insertStitch} onCombo={setCombo} palette={part.palette} color={colorId} onColor={setColorId} tool={tool} onTool={(t) => { setTool(t); segAnchor.current = null; }} onEditPalette={() => setDialog('palette')} />
+        <StitchPanel onStitch={insertStitch} onCombo={setCombo} palette={part.palette} color={colorId} onColor={pickColor} tool={tool} onTool={(t) => { setTool(t); segAnchor.current = null; }} onEditPalette={() => setDialog('palette')} />
 
         <main className="ed-mid">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -347,7 +361,7 @@ export default function Editor({ partId }: { partId: string }) {
             <RowList
               part={part} analysis={analysis} activeRowId={activeRowId} display={prefs.display} inputRefs={inputRefs}
               onFocusRow={focusRowLink} onChange={changeRow} onAddAfter={addRowAfter} onDelete={deleteRow} onDuplicate={duplicateRow} onMove={moveRow}
-              onStripPaint={stripPaint} paintActive={tool !== 'select'}
+              onStripPaint={stripPaint} paintActive={tool !== 'select'} onPaintRow={paintRow} currentColor={part.palette.find((c) => c.id === colorId)}
             />
           )}
         </main>
