@@ -355,7 +355,7 @@ export default function Editor({ partId }: { partId: string }) {
             <button className="btn" title="上下翻轉（帽子從帽尖開始鉤時用）" aria-pressed={!!part.settings.flip} onClick={() => update((p) => ({ ...p, settings: { ...p.settings, flip: !p.settings.flip } }))}>⇅ 翻轉</button>
             <button className="btn" aria-pressed={autoRotate} onClick={() => setAutoRotate((a) => !a)} style={autoRotate ? { borderColor: 'var(--accent)', color: 'var(--accent-ink)', background: 'var(--soft)' } : undefined}>⟳ 自動旋轉</button>
           </div>
-          <div className={`p3-view${prefs.background === 'transparent' ? ' transparent' : ''}`} style={prefs.background === 'white' ? { background: '#FFFFFF' } : undefined}>
+          <div className={`p3-view${prefs.background === 'transparent' ? ' transparent' : ''}`} >
             <Suspense fallback={<p className="muted" style={{ padding: 16 }}>3D 載入中…</p>}>
               <Preview3D data={shape} flip={!!part.settings.flip} yarn={anyTexture} autoRotate={autoRotate} selected={selected} accent={accent} view={view} fitKey={partId} onPick={handlePick} />
             </Suspense>

@@ -79,19 +79,29 @@ export default function Library() {
                   </div>
                 </a>
                 <div className="card-body">
-                  <a href={href} className="card-title" style={{ textDecoration: 'none', color: 'inherit' }}>{x.name}</a>
-                  <span className="muted" style={{ fontSize: 13 }}>{meta}</span>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <a href={href} className="card-title" style={{ textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.name}</a>
                     {x.sample && <span className="tag">範例</span>}
-                    {x.tags.map((t) => <span key={t} className="tag" style={{ background: 'var(--bg)', color: 'var(--muted)' }}>{t}</span>)}
-                    <span className="spacer" />
-                    {isPart && <button className="btn ghost sm" onClick={() => actions.duplicatePart(x.id)}>複製</button>}
+                  </div>
+                  <span className="muted" style={{ fontSize: 13 }}>{meta}</span>
+                  {x.tags.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {x.tags.map((t) => <span key={t} className="tag" style={{ background: 'var(--bg)', color: 'var(--muted)' }}>{t}</span>)}
+                    </div>
+                  )}
+                  <div className="card-actions">
                     {confirm === x.id ? (
                       <>
-                        <button className="btn sm danger" onClick={() => { if (isPart) actions.deletePart(x.id); else actions.deleteWork(x.id); setConfirm(null); }}>確定刪除</button>
+                        <span className="muted" style={{ fontSize: 13, marginRight: 'auto' }}>確定要刪除？</span>
                         <button className="btn ghost sm" onClick={() => setConfirm(null)}>取消</button>
+                        <button className="btn sm danger" onClick={() => { if (isPart) actions.deletePart(x.id); else actions.deleteWork(x.id); setConfirm(null); }}>刪除</button>
                       </>
-                    ) : <button className="btn ghost sm" onClick={() => setConfirm(x.id)}>刪除</button>}
+                    ) : (
+                      <>
+                        {isPart && <button className="btn ghost sm" onClick={() => actions.duplicatePart(x.id)}>複製</button>}
+                        <button className="btn ghost sm" onClick={() => setConfirm(x.id)}>刪除</button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Part } from '../types';
 import { analyze } from '../pattern/analyze';
 import { roundHexes } from '../pattern/colors';
@@ -11,8 +11,28 @@ function main(hexes: string[]): string {
   return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '#ccc';
 }
 
-/** A flat side-view silhouette of a part, cheap enough for every library card. */
+/**
+ * Library thumbnail: a real 3D render (yarn, studio light), drawn in the
+ * background; the flat silhouette shows until it is ready, or if WebGL is
+ * unavailable.
+ */
 export default function Thumb({ part, size = 140 }: { part: Part; size?: number }) {
+  const [src, setSrc] = useState<string>('');
+  useEffect(() => {
+    let alive = true;
+    import('../three/thumbnail').then(({ thumbnail, cachedThumbnail }) => {
+      const hit = cachedThumbnail(part);
+      if (hit) { setSrc(hit); return; }
+      thumbnail(part).then((url) => { if (alive) setSrc(url); });
+    }).catch(() => { /* keep the silhouette */ });
+    return () => { alive = false; };
+  }, [part]);
+  if (src) return <img src={src} alt="" width={size * 1.15} height={size * 1.15} style={{ objectFit: 'contain', maxWidth: '100%' }} />;
+  return <Silhouette part={part} size={size} />;
+}
+
+/** A flat side-view silhouette of a part, cheap enough for every library card. */
+function Silhouette({ part, size }: { part: Part; size: number }) {
   const bands = useMemo(() => {
     const a = analyze(part.rows, part.settings);
     const rounds = a.rounds.filter((r) => r.stitches.length && r.status !== 'syntax').map((info) => ({ info, hexes: roundHexes(part, info) }));
