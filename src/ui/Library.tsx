@@ -1,3 +1,4 @@
+import { saveFile } from '../saveFile';
 import { useMemo, useState } from 'react';
 import { CLOUD, actions, useStore } from '../store/store';
 import type { Part, Work } from '../types';
@@ -42,10 +43,7 @@ export default function Library() {
   const [note, setNote] = useState('');
   const exportAll = () => {
     const data = { app: 'crochet-3d-studio', version: 1, exportedAt: new Date().toISOString(), parts: Object.values(parts), works: Object.values(works) };
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-    a.download = `鉤織備份_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
+    void saveFile(`鉤織備份_${new Date().toISOString().slice(0, 10)}.json`, new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
   };
   const importFile = async (f: File) => {
     try {

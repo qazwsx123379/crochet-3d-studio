@@ -13,20 +13,13 @@ import { METHOD_NAME, START_NAME, patternRows } from '../pattern/text';
 import SymbolChart, { ChartPrintContext } from './SymbolChart';
 import { thumbnail } from '../three/thumbnail';
 import { ACCESSORIES } from './Assembly';
+import { saveFile } from '../saveFile';
 
 interface Props { kind: 'part' | 'work'; part?: Part; work?: Work; onClose: () => void }
 
 const PAGE_W = 794; // A4 at 96 dpi
 const PAGE_H = 1123;
 
-function download(url: string, name: string) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
 const safe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '_').trim() || '鉤織作品';
 
 /** The 3D view currently on screen, if any (the editor's preview or the assembly scene). */
@@ -163,7 +156,7 @@ export default function ExportDialog({ kind, part, work, onClose }: Props) {
         pdf.setTextColor(150);
         pdf.text(`${i + 1} / ${breaks.length - 1}`, PAGE_W - 40, PAGE_H - 14);
       }
-      pdf.save(`${safe(title)}_圖解.pdf`);
+      await saveFile(`${safe(title)}_圖解.pdf`, pdf.output('blob'));
       setBusy('');
     } catch (e) {
       console.error(e);
@@ -176,7 +169,7 @@ export default function ExportDialog({ kind, part, work, onClose }: Props) {
     setBusy('正在產生圖片…');
     try {
       const c = await toCanvas(textSheet.current);
-      download(c.toDataURL('image/png'), `${safe(title)}_文字織圖.png`);
+      await saveFile(`${safe(title)}_文字織圖.png`, c.toDataURL('image/png'));
       setBusy('');
     } catch (e) { console.error(e); setBusy('匯出失敗，請再試一次'); }
   };
@@ -184,7 +177,7 @@ export default function ExportDialog({ kind, part, work, onClose }: Props) {
   const export3d = async () => {
     const url = screenShot(white) || (list[0] ? await thumbnail(list[0].part) : '');
     if (!url) { setBusy('找不到 3D 畫面'); return; }
-    download(url, `${safe(title)}_3D.png`);
+    await saveFile(`${safe(title)}_3D.png`, url);
   };
 
   const exportJson = () => {
@@ -193,7 +186,7 @@ export default function ExportDialog({ kind, part, work, onClose }: Props) {
       parts: list.map((x) => x.part),
       works: kind === 'work' ? [work] : [],
     };
-    download(URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), `${safe(title)}.json`);
+    void saveFile(`${safe(title)}.json`, new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
   };
 
   const today = new Date().toLocaleDateString('zh-TW');
