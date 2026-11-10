@@ -65,11 +65,11 @@ function splitIncreases(list: Placement[], rounds: ShapeRound[]): Placement[] {
 export function prepareRender(rounds: ShapeRound[], opts: ShapeOptions, yarn: boolean): RenderData | null {
   const base = buildShape(rounds, opts);
   if (!base) return null;
-  const relaxed = base.kind === 'lathe' ? relaxShape(base, rounds, { ...opts, fillShade: yarn ? 0.55 : 1 }) : null;
+  const relaxed = relaxShape(base, rounds, { ...opts, fillShade: yarn ? 0.55 : 1 });
   if (relaxed) {
     const [minY, maxY] = boundsY(relaxed.fill.positions);
     // A piece that lies flat (a coaster) is seen from both sides: put yarn on both.
-    const flatish = maxY - minY < relaxed.radius * 0.35;
+    const flatish = base.kind === 'flat' || maxY - minY < relaxed.radius * 0.35;
     const front = splitIncreases(relaxed.placements, rounds);
     const placements = flatish ? [...front, ...front.map((p) => ({ ...p, normal: neg(p.normal), tangent: neg(p.tangent) }))] : front;
     return {

@@ -38,19 +38,23 @@ function hexDarken(hex: string, k: number): [number, number, number] {
 }
 
 export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOptions & { fillShade: number }): RelaxedShape | null {
-  if (base.kind !== 'lathe' || !base.placements.length) return null;
+  if (!base.placements.length) return null;
+  // Flat pieces (rows worked back and forth) relax too: a row with many more
+  // stitches than the one below has to curve or ruffle, just like real fabric.
+  const flat = base.kind === 'flat';
 
   // ---- nodes: the top of every stitch, starting from the lathe guess ----
   const nodes: Node[] = [];
   const byRound = new Map<number, number[]>();
   const placementIndex = new Map<string, Placement>();
-  for (const p of base.placements) placementIndex.set(`${p.roundNo}:${p.index}`, p);
+  // Flat sheets carry a front and a back copy of every stitch; start from the front.
+  for (const p of base.placements) if (!flat || p.normal[2] > 0) placementIndex.set(`${p.roundNo}:${p.index}`, p);
   const usable = rounds.filter((r) => r.info.stitches.length > 0);
   const roundIdx = new Map(usable.map((r, i) => [r.info.no, i]));
 
   // A centre point for magic-ring starts (round 1 is worked into it).
   const firstNo = base.placements[0].roundNo;
-  const ringStart = opts.start === 'ring';
+  const ringStart = opts.start === 'ring' && !flat;
   let centerId = -1;
   if (ringStart) {
     const first = base.placements.filter((p) => p.roundNo === firstNo);
@@ -65,10 +69,12 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
     let ptr = 0;
     let lastGroup: number | undefined;
     let groupParents: number[] = [];
+    // A flat row turns and works back along the row below, from its far end.
+    const below = flat ? [...prevSlots].reverse() : prevSlots;
     const take = (n: number): number[] => {
-      if (!prevSlots.length) return ringStart && centerId >= 0 && !byRound.size ? [centerId] : [];
+      if (!below.length) return ringStart && centerId >= 0 && !byRound.size ? [centerId] : [];
       const out: number[] = [];
-      for (let k = 0; k < n; k++) out.push(prevSlots[(ptr + k) % prevSlots.length]);
+      for (let k = 0; k < n; k++) out.push(below[flat ? Math.min(ptr + k, below.length - 1) : (ptr + k) % below.length]);
       ptr += n;
       return [...new Set(out)];
     };
@@ -87,6 +93,8 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
       const pl = placementIndex.get(`${r.info.no}:${k}`);
       if (!pl) return; // a skipped stitch leaves no stitch of its own
       const top = add(pl.pos, mul(pl.up, pl.height * 0.45));
+      // A tiny, fixed wobble lets a flat sheet buckle out of its plane where it must.
+      if (flat) top[2] += Math.sin(k * 1.7 + r.info.no * 2.3) * 0.2;
       const id = nodes.push({ p: top, round: roundIdx.get(r.info.no)!, roundNo: r.info.no, index: k, parents: parents.length ? parents : (prevSlots.length ? [] : ringStart ? [centerId] : []), hex: pl.hex, height: Math.max(0.4, def.height), produces: def.produces, placement: pl }) - 1;
       ids.push(id);
       for (let q = 0; q < def.produces; q++) slots.push(id);
@@ -105,7 +113,7 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
     for (let k = 0; k < n; k++) {
       if (n < 2) break;
       const a = ids[k], b = ids[(k + 1) % n];
-      if (k === n - 1 && n < 3) break;
+      if (k === n - 1 && (n < 3 || flat)) break;
       // An increase makes two stitches on top, so it is two stitch widths wide.
       const widths = (Math.max(0.5, nodes[a].produces) + Math.max(0.5, nodes[b].produces)) / 2;
       const w = (len(sub(nodes[a].placement!.pos, nodes[b].placement!.pos)) + widths) / 2; // between the guess and the true width
@@ -129,19 +137,21 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
   // so increases show their facets without the fabric buckling.
   for (let i = 0; i < nodes.length; i++) for (const par of nodes[i].parents) {
     const guess = len(sub(nodes[i].p, nodes[par].p));
-    links.push([i, par, guess * 0.5 + nodes[i].height * 0.5, 0.45]);
+    // Flat rows start as a plain stack, so their guess says nothing; use the true height.
+    links.push(flat ? [i, par, nodes[i].height, 0.5] : [i, par, guess * 0.5 + nodes[i].height * 0.5, 0.45]);
   }
 
   // ---- settle ----
   const P = nodes.map((n) => [...n.p] as V3);
   const closed = opts.stuffed && roundLists.length > 3 && roundLists[roundLists.length - 1].length <= Math.max(8, roundLists.reduce((m, l) => Math.max(m, l.length), 0) * 0.5);
-  const iterations = Math.min(90, Math.max(30, Math.round(120000 / Math.max(1, links.length))));
+  const iterations = flat ? Math.min(220, Math.max(80, Math.round(200000 / Math.max(1, links.length)))) : Math.min(90, Math.max(30, Math.round(120000 / Math.max(1, links.length))));
   for (let it = 0; it < iterations; it++) {
     // Keep rounds smooth so the fabric doesn't crumple.
     for (const ids of roundLists) {
       const n = ids.length;
       if (n < 3) continue;
       for (let k = 0; k < n; k++) {
+        if (flat && (k === 0 || k === n - 1)) continue;
         const a = P[ids[(k + n - 1) % n]], b = P[ids[(k + 1) % n]], c = P[ids[k]];
         for (let d = 0; d < 3; d++) c[d] += ((a[d] + b[d]) / 2 - c[d]) * 0.04;
       }
@@ -170,7 +180,7 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
   const rings = new Map<number, V3[]>();
   for (const ids of roundLists) {
     const n = ids.length;
-    rings.set(nodes[ids[0]].roundNo, [...ids.map((i) => P[i]), P[ids[0]]]);
+    rings.set(nodes[ids[0]].roundNo, flat ? ids.map((i) => P[i]) : [...ids.map((i) => P[i]), P[ids[0]]]);
     ids.forEach((id, k) => {
       const node = nodes[id];
       const pl = node.placement!;
@@ -179,11 +189,11 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
       const upVec = sub(top, bottom);
       const height = Math.max(0.3, len(upVec));
       const up = norm(upVec);
-      const prev = P[ids[(k + n - 1) % n]], next = P[ids[(k + 1) % n]];
+      const prev = P[ids[flat ? Math.max(0, k - 1) : (k + n - 1) % n]], next = P[ids[flat ? Math.min(n - 1, k + 1) : (k + 1) % n]];
       let tangent = n > 1 ? norm(sub(next, prev)) : pl.tangent;
       const pos = add(bottom, mul(upVec, 0.5));
       let normal = norm(cross(tangent, up));
-      if (dot(normal, sub(pos, C)) < 0 && dot(pl.normal, normal) < 0) normal = mul(normal, -1);
+      if (flat ? dot(normal, [0, 0, 1]) < 0 : dot(normal, sub(pos, C)) < 0 && dot(pl.normal, normal) < 0) normal = mul(normal, -1);
       tangent = norm(cross(up, normal));
       const width = n > 1 ? Math.max(0.35, (len(sub(next, top)) + len(sub(top, prev))) / 2) : pl.width;
       placements.push({ ...pl, pos, up, normal, tangent, width, height });
@@ -212,7 +222,7 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
     const below = r > 0 ? roundLists[r - 1] : null;
     for (let k = 0; k < n; k++) {
       const a = ids[k], b = ids[(k + 1) % n];
-      if (k === n - 1 && n < 3) break;
+      if (k === n - 1 && (n < 3 || flat)) break;
       const pa = nodes[a].parents[0], pb = nodes[b].parents[0];
       if (pa === undefined || pb === undefined) continue;
       tri(a, b, pa, b);
@@ -222,14 +232,16 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
         const m = below.length;
         let i = prevOrder.get(pa)!;
         const end = prevOrder.get(pb)!;
+        // Rounds run the same way as the round below; flat rows run back the other way.
+        const step = flat ? (end > i ? 1 : -1) : 1;
         let guard = 0;
-        while (i !== end && guard++ < m) { const j = (i + 1) % m; tri(b, below[j], below[i], b); i = j; }
+        while (i !== end && guard++ < m) { const j = (i + step + m) % m; tri(b, below[j], below[i], b); i = j; }
       } else tri(b, pb, pa, b);
     }
   }
   // Close a top that was decreased shut.
   const last = roundLists[roundLists.length - 1];
-  if (roundLists.length > 3 && last.length <= 8) {
+  if (!flat && roundLists.length > 3 && last.length <= 8) {
     const apexP = mul(last.reduce<V3>((s, i) => add(s, P[i]), [0, 0, 0]), 1 / last.length);
     const apex = nodes.push({ p: apexP, round: -2, roundNo: nodes[last[0]].roundNo, index: 0, parents: [], hex: nodes[last[0]].hex, height: 0, produces: 0 }) - 1;
     P.push(apexP);
@@ -241,7 +253,7 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
     const a = pos.slice(idx[t] * 3, idx[t] * 3 + 3) as V3, b = pos.slice(idx[t + 1] * 3, idx[t + 1] * 3 + 3) as V3, c = pos.slice(idx[t + 2] * 3, idx[t + 2] * 3 + 3) as V3;
     score += dot(cross(sub(b, a), sub(c, a)), sub(a, C));
   }
-  if (score < 0) for (let t = 0; t < idx.length; t += 3) { const s = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = s; }
+  if (!flat && score < 0) for (let t = 0; t < idx.length; t += 3) { const s = idx[t + 1]; idx[t + 1] = idx[t + 2]; idx[t + 2] = s; }
 
   let min: V3 = [Infinity, Infinity, Infinity], max: V3 = [-Infinity, -Infinity, -Infinity];
   for (const p of P) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], p[k]); max[k] = Math.max(max[k], p[k]); }

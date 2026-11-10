@@ -25,10 +25,32 @@ describe('prepareRender', () => {
     expect(d.doubleSided).toBe(true);
   });
 
-  it('draws flat pieces without relaxing', () => {
+  it('keeps a plain flat piece flat', () => {
     const r = rounds(rows(['ch8'], ['X*8', 3]), 'flat', 'chain');
     const d = prepareRender(r, { method: 'flat', start: 'chain', stuffed: false }, true)!;
-    expect(d.index).toBeUndefined();
     expect(d.doubleSided).toBe(true);
+    const ring = d.rings.get(4)!;
+    // The last row is still close to a straight line across.
+    const ends = [ring[0], ring[ring.length - 1]];
+    const span = Math.hypot(ends[1][0] - ends[0][0], ends[1][1] - ends[0][1], ends[1][2] - ends[0][2]);
+    expect(span).toBeGreaterThan(5);
+  });
+
+  it('bends a flat row that increases into every stitch', () => {
+    const r = rounds(rows(['ch20'], ['X*20'], ['V*20']), 'flat', 'chain');
+    const d = prepareRender(r, { method: 'flat', start: 'chain', stuffed: false }, true)!;
+    const ring = d.rings.get(3)!;
+    const a = ring[0], b = ring[ring.length - 1];
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const L = Math.hypot(...ab);
+    // Distance of each point from the straight line a–b: a curved or ruffled row strays from it.
+    const off = Math.max(...ring.map((p) => {
+      const ap = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+      const t = (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (L * L);
+      return Math.hypot(ap[0] - ab[0] * t, ap[1] - ab[1] * t, ap[2] - ab[2] * t);
+    }));
+    expect(off).toBeGreaterThan(1);
+    // and the row is shorter end to end than its 40 stitches laid straight
+    expect(L).toBeLessThan(38);
   });
 });

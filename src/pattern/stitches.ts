@@ -43,6 +43,8 @@ export const STITCHES: StitchDef[] = [
   { code: 'E', name: '長長針', short: '長長針', aliases: ['長長針'], consumes: 1, produces: 1, height: 2.6, shape: 'post', key: 'e', group: 'basic' },
   { code: 'V', name: '短針加針', short: '加針', aliases: ['短針加針', '加針'], consumes: 1, produces: 2, height: 1, shape: 'post', key: 'v', group: 'incdec' },
   { code: 'A', name: '短針減針', short: '減針', aliases: ['短針減針', '減針'], consumes: 2, produces: 1, height: 1, shape: 'post', key: 'a', group: 'incdec' },
+  { code: 'TV', name: '中長針加針', short: '中長加', aliases: ['中長針加針'], consumes: 1, produces: 2, height: 1.5, shape: 'post', key: '', group: 'incdec' },
+  { code: 'TA', name: '中長針減針', short: '中長減', aliases: ['中長針減針'], consumes: 2, produces: 1, height: 1.5, shape: 'post', key: '', group: 'incdec' },
   { code: 'FV', name: '長針加針', short: '長加', aliases: ['長針加針'], consumes: 1, produces: 2, height: 2, shape: 'post', key: '', group: 'incdec' },
   { code: 'FA', name: '長針減針', short: '長減', aliases: ['長針減針'], consumes: 2, produces: 1, height: 2, shape: 'post', key: '', group: 'incdec' },
   { code: 'Q', name: '棗型針', short: '棗型', aliases: ['棗型針', '棗形針'], consumes: 1, produces: 1, height: 2, shape: 'bump', key: '', group: 'fancy' },
