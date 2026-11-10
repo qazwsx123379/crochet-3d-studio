@@ -37,3 +37,37 @@ export function inkOn(hex: string): string {
   const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? '#1D2928' : '#FFFFFF';
 }
+
+export interface ColorSpan { from: number; to: number; colorId: string; name: string; hex: string }
+
+/**
+ * Colour changes a crocheter needs to know about, per round: the runs of
+ * colour inside the round (stitch numbers are 1-based, in the order the
+ * stitches are written), and whether the round as a whole switches colour.
+ * Rounds in one colour that carry on from the round before get no note.
+ */
+export function colorChanges(part: Part, rounds: RoundInfo[]): Map<number, { spans: ColorSpan[]; whole: boolean }> {
+  const byId = new Map(part.palette.map((c) => [c.id, c]));
+  const out = new Map<number, { spans: ColorSpan[]; whole: boolean }>();
+  let lastColor = '';
+  for (const r of rounds) {
+    if (!r.stitches.length || r.status === 'syntax') continue;
+    const ids = roundColorIds(part, r);
+    const spans: ColorSpan[] = [];
+    ids.forEach((id, i) => {
+      const last = spans[spans.length - 1];
+      if (last && last.colorId === id) last.to = i + 1;
+      else { const c = byId.get(id); spans.push({ from: i + 1, to: i + 1, colorId: id, name: c?.name ?? '', hex: c?.hex ?? '#ccc' }); }
+    });
+    if (spans.length > 1) out.set(r.no, { spans, whole: false });
+    else if (lastColor && spans[0].colorId !== lastColor) out.set(r.no, { spans, whole: true });
+    lastColor = ids[ids.length - 1];
+  }
+  return out;
+}
+
+/** The same notes as plain text, e.g. 「第 1–12 針 南瓜橘 → 第 13–18 針 黑」. */
+export function colorChangeText(change: { spans: ColorSpan[]; whole: boolean }): string {
+  if (change.whole) return `這圈換成「${change.spans[0].name}」`;
+  return change.spans.map((s) => `第 ${s.from === s.to ? s.from : `${s.from}–${s.to}`} 針「${s.name}」`).join(' → ');
+}

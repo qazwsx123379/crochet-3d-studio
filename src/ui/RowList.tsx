@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Analysis, PatternRow } from '../pattern/analyze';
 import type { Part } from '../types';
-import { roundHexes } from '../pattern/colors';
+import { colorChanges, roundHexes, type ColorSpan } from '../pattern/colors';
 import { toChinese } from '../pattern/parser';
 
 interface Props {
@@ -38,8 +38,22 @@ function RepeatInput({ value, label, onCommit }: { value: number; label: string;
   );
 }
 
+/** 「第 1–12 針 ●南瓜橘 → 第 13–18 針 ●黑」 */
+function ColorNote({ label, spans, whole }: { label?: string; spans: ColorSpan[]; whole: boolean }) {
+  const dot = (hex: string) => <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: hex, border: '1px solid var(--line)', verticalAlign: '-1px', margin: '0 3px 0 4px' }} />;
+  return (
+    <span className="row-msg color-note">
+      {label && <b>{label}：</b>}
+      {whole
+        ? <>這圈換成{dot(spans[0].hex)}{spans[0].name}</>
+        : spans.map((s, i) => <span key={i}>{i > 0 && ' → '}第 {s.from === s.to ? s.from : `${s.from}–${s.to}`} 針{dot(s.hex)}{s.name}</span>)}
+    </span>
+  );
+}
+
 export default function RowList(p: Props) {
   const [notes, setNotes] = useState<Set<string>>(new Set());
+  const changes = useMemo(() => colorChanges(p.part, p.analysis.rounds), [p.part, p.analysis]);
   const [focused, setFocused] = useState<string | null>(null);
   const dragFrom = useRef<{ row: string; i: number } | null>(null);
   const [hover, setHover] = useState<{ row: string; a: number; b: number } | null>(null);
@@ -115,6 +129,16 @@ export default function RowList(p: Props) {
                 <button title="下移" aria-label="下移" onClick={() => p.onMove(row.id, 1)}>↓</button>
                 <button title="刪除這一行" aria-label="刪除這一行" onClick={() => p.onDelete(row.id)}>✕</button>
               </div>
+              {(() => {
+                // One note per round that changes colour; a repeated row names each round.
+                const notesHere = p.analysis.rounds.filter((r) => r.rowId === row.id && changes.has(r.no));
+                if (!notesHere.length) return null;
+                return (
+                  <div className="row-colors">
+                    {notesHere.map((r) => { const c = changes.get(r.no)!; return <ColorNote key={r.no} label={info.first !== info.last ? `R${r.no}` : undefined} spans={c.spans} whole={c.whole} />; })}
+                  </div>
+                );
+              })()}
               {showNote && (
                 <div className="row-note">
                   <input value={row.note} placeholder="備註，例如：這圈開始塞棉花" aria-label={`${label} 備註`} onChange={(e) => p.onChange(row.id, { note: e.target.value }, `note:${row.id}`)} />

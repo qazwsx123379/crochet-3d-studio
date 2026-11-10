@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffe
 import type { Part } from '../types';
 import type { PatternRow, RoundInfo } from '../pattern/analyze';
 import { analyze } from '../pattern/analyze';
-import { roundColorIds, roundHexes, roundKey, stitchKey } from '../pattern/colors';
+import { colorChangeText, colorChanges, roundColorIds, roundHexes, roundKey, stitchKey } from '../pattern/colors';
 import { STITCHES, STITCH_BY_CODE } from '../pattern/stitches';
 import { prepareRender } from '../three/render';
 import type { Pick, ViewName } from '../three/Preview3D';
@@ -289,7 +289,13 @@ export default function Editor({ partId }: { partId: string }) {
   for (const r of analysis.rounds) for (const id of roundColorIds(part, r)) usage[id] = (usage[id] ?? 0) + 1;
 
   const copyAll = async () => {
-    const text = analysis.rows.map((ri) => `${ri.first === ri.last ? `R${ri.first}` : `R${ri.first}-R${ri.last}`}: ${ri.row.text} (${ri.produced})${ri.row.note ? `  # ${ri.row.note}` : ''}`).join('\n');
+    const changes = colorChanges(part, analysis.rounds);
+    const text = analysis.rows.map((ri) => {
+      const head = `${ri.first === ri.last ? `R${ri.first}` : `R${ri.first}-R${ri.last}`}: ${ri.row.text} (${ri.produced})${ri.row.note ? `  # ${ri.row.note}` : ''}`;
+      const colours = analysis.rounds.filter((r) => r.rowId === ri.row.id && changes.has(r.no))
+        .map((r) => `    ${ri.first !== ri.last ? `R${r.no} ` : ''}顏色：${colorChangeText(changes.get(r.no)!)}`);
+      return [head, ...colours].join('\n');
+    }).join('\n');
     try { await navigator.clipboard.writeText(text); setToast('已複製整份織圖文字'); } catch { setToast('這個瀏覽器不允許複製，請改用匯出'); }
   };
 

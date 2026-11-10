@@ -151,7 +151,7 @@ export default function Preview3D({ data, flip, yarn, autoRotate, selected, acce
   const floor = data ? (flip ? 2 * data.center[1] - data.maxY : data.minY) - 0.02 : 0;
   const stitches = data?.placements.length ?? 0;
   return (
-    <Canvas camera={{ fov: 32, position: [6, 5, 10] }} gl={{ preserveDrawingBuffer: true, alpha: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 0.85 }} dpr={[1, 2]}>
+    <Canvas frameloop={autoRotate ? 'always' : 'demand'} camera={{ fov: 32, position: [6, 5, 10] }} gl={{ preserveDrawingBuffer: true, alpha: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 0.85 }} dpr={[1, 2]}>
       <Studio />
       <hemisphereLight args={['#ffffff', '#cfc8bd', 0.55]} />
       <directionalLight position={[5, 9, 7]} intensity={1.3} />
