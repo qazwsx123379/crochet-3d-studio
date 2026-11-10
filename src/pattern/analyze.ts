@@ -84,13 +84,18 @@ export function analyze(rows: PatternRow[], settings: PartSettingsLike): Analysi
   let problems = 0;
 
   for (const row of rows) {
-    const parsed = parseRound(row.text);
+    // A `*到底` repeat depends on what the round below left, so such rows are parsed per round.
+    const plain = parseRound(row.text);
+    const hasAuto = /到底|到尾|[~～]/.test(row.text) && !plain.errors.length;
+    let parsed = plain;
     const repeat = Math.max(1, Math.min(200, Math.floor(row.repeat || 1)));
     const first = no;
     let rowStatus: RoundStatus = 'ok';
     let rowMsg = '';
 
     for (let k = 0; k < repeat; k++) {
+      const startHere = k === 0 && row.startAt && row.startAt > 1 && prevProduced !== undefined ? Math.min(row.startAt, prevProduced) : 1;
+      if (hasAuto) parsed = parseRound(row.text, prevProduced === undefined ? undefined : prevProduced - (settings.method === 'flat' ? startHere - 1 : 0));
       const info: RoundInfo = {
         no, rowId: row.id, inRow: k, stitches: parsed.stitches, consumed: parsed.consumed, produced: parsed.produced,
         expected: prevProduced, status: 'ok', message: '', loopOnly: loopOnly(parsed.stitches),
@@ -122,14 +127,22 @@ export function analyze(rows: PatternRow[], settings: PartSettingsLike): Analysi
           info.status = 'over';
           info.message = `${where}上一圈${flatSkip ? '剩' : '只有'} ${available} 針，這圈要用 ${parsed.consumed} 針，多了 ${parsed.consumed - available} 針`;
         } else if (parsed.consumed < available) {
-          if (start > 1) {
+          const left = available - parsed.consumed;
+          const prevRound = rounds[rounds.length - 1];
+          if (parsed.auto && left < parsed.auto.unit) {
+            info.message = `${where}重複 ${parsed.auto.times} 次${left ? `，最後剩 ${left} 針沒鉤` : ''}`;
+          } else if (settings.method === 'flat' && start === 1 && prevRound?.foundation && left <= 3) {
+            // 「69 起針，倒 3 鉤 67F」: the chains nearest the hook stand in for the turning chain.
+            info.message = `起針最後 ${left} 個鎖針當作起立針（從倒數第 ${left + 1} 針開始鉤）`;
+          } else if (start > 1) {
             // Starting part-way along is deliberate shaping: say what is left, don't flag it.
             info.message = `${where}最後剩 ${available - parsed.consumed} 針沒鉤`;
           } else {
             info.status = 'short';
             info.message = `上一圈 ${prevProduced} 針，這圈只用掉 ${parsed.consumed} 針，還差 ${available - parsed.consumed} 針`;
           }
-        } else if (start > 1) info.message = `${where}剛好用完`;
+        } else if (parsed.auto) info.message = `${where}重複 ${parsed.auto.times} 次，剛好用完`;
+        else if (start > 1) info.message = `${where}剛好用完`;
       }
       if (k === 0) { rowStatus = info.status; rowMsg = info.message; }
       if (info.status === 'syntax' || info.status === 'short' || info.status === 'over') problems++;

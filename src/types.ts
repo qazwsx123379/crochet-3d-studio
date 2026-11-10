@@ -35,10 +35,43 @@ export interface Part {
   sample?: boolean;
 }
 
+export type V3 = [number, number, number];
+
+/** One copy of a part placed in a work's 3D scene. */
+export interface WorkItem {
+  id: string;
+  partId: string;
+  pos: V3;
+  /** Euler angles in degrees (XYZ). */
+  rot: V3;
+  scale: number;
+  /** Left–right mirror image. */
+  mirror?: boolean;
+}
+
+export type AccessoryKind = 'eye' | 'nose' | 'mouth' | 'blush' | 'bow' | 'button';
+
+/** A safety eye, nose, embroidered mouth… placed on the work. */
+export interface Accessory {
+  id: string;
+  kind: AccessoryKind;
+  pos: V3;
+  /** Direction the accessory faces (the surface normal where it was placed). */
+  normal: V3;
+  /** Spin around the normal, degrees. */
+  spin: number;
+  /** Size in stitch units (about 1 = one single crochet). */
+  size: number;
+  color: string;
+}
+
 export interface Work {
   id: string;
   name: string;
   partIds: string[];
+  /** 3D placement of each part copy; missing on works made before assembly existed. */
+  items?: WorkItem[];
+  accessories?: Accessory[];
   tags: string[];
   updatedAt: number;
   sample?: boolean;
@@ -58,4 +91,6 @@ export interface Prefs {
   symbolColor: 'symbol' | 'cell';
   /** Width of the 3D panel on wide screens, in px. */
   panelWidth: number;
+  /** Which batch of example parts this account has been given. */
+  sampleVersion?: number;
 }

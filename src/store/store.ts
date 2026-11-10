@@ -10,7 +10,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Part, Prefs, Work } from '../types';
 import { STITCHES } from '../pattern/stitches';
-import { sampleParts, sampleWorks } from './samples';
+import { SAMPLE_VERSION, collarParts, collarWorks, sampleParts, sampleWorks } from './samples';
 import { newId } from './yarns';
 import type { Account, Change, Kind } from './cloud';
 
@@ -185,14 +185,15 @@ async function startCloud() {
       onDocs: (kind, changes) => {
         applyRemote(kind, changes);
         loaded.add(kind);
-        if (loaded.size === 2 && authState.status === 'signedIn' && !authState.ready) setAuth({ ...authState, ready: true });
+        if (loaded.size === 2 && authState.status === 'signedIn' && !authState.ready) { setAuth({ ...authState, ready: true }); setTimeout(migrateSamples, 1500); }
       },
-      onPrefs: (data) => { if (data && !queued.has('prefs/prefs') && !inFlight.has('prefs/prefs')) { state = { ...state, prefs: withPrefs(data as Partial<Prefs>) }; emit(); } },
+      onPrefs: (data) => { prefsSeen = true; if (data && !queued.has('prefs/prefs') && !inFlight.has('prefs/prefs')) { state = { ...state, prefs: withPrefs(data as Partial<Prefs>) }; emit(); } },
       onError: (message) => { console.error(message); setSave('failed'); },
     });
   });
 }
 
+if (!CLOUD && typeof window !== 'undefined') setTimeout(migrateSamples, 0);
 if (CLOUD && typeof window !== 'undefined') startCloud().catch((e) => setAuth({ status: 'signedOut', error: String(e) }));
 
 export async function signIn() {
@@ -217,6 +218,19 @@ if (typeof window !== 'undefined') {
 }
 
 /* ---------------- state updates ---------------- */
+
+/** Give accounts made before a sample batch existed the new examples, once. */
+let prefsSeen = false;
+function migrateSamples() {
+  // Wait for the account's saved settings, so they are never overwritten by defaults.
+  if (CLOUD && !prefsSeen) { setTimeout(migrateSamples, 1000); return; }
+  if ((state.prefs.sampleVersion ?? 1) >= SAMPLE_VERSION) return;
+  const parts = { ...state.parts };
+  const works = { ...state.works };
+  for (const p of collarParts()) if (!parts[p.id]) parts[p.id] = p;
+  for (const w of collarWorks()) if (!works[w.id]) works[w.id] = w;
+  set({ parts, works, prefs: { ...state.prefs, sampleVersion: SAMPLE_VERSION } });
+}
 
 function set(next: State) {
   const prev = state;

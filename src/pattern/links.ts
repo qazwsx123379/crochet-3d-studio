@@ -4,7 +4,7 @@
  * stitches together (rounds run the same way as the round below, flat rows
  * turn and work back from its far end, a row may start part-way along).
  */
-import { STITCH_BY_CODE } from './stitches';
+import { STITCH_BY_CODE, consumesOf } from './stitches';
 import type { Method, RoundInfo } from './analyze';
 
 export function stitchParents(rounds: RoundInfo[], method: Method): Map<number, number[][]> {
@@ -29,10 +29,10 @@ export function stitchParents(rounds: RoundInfo[], method: Method): Map<number, 
       if (!def) { parents.push([]); return; }
       if (st.group !== undefined && st.group === lastGroup) parents.push(groupParents);
       else if (st.group !== undefined) {
-        const consumes = r.stitches.some((s) => s.group === st.group && STITCH_BY_CODE[s.code]?.consumes) ? 1 : 0;
+        const consumes = r.stitches.some((s) => s.group === st.group && consumesOf(s)) ? 1 : 0;
         groupParents = take(consumes);
         parents.push(groupParents);
-      } else parents.push(take(def.consumes));
+      } else parents.push(take(consumesOf(st)));
       lastGroup = st.group;
     });
     out.set(r.no, parents);

@@ -14,6 +14,8 @@ import { MODIFIER_WORDS, STITCH_BY_CODE, STITCH_WORDS, type ModifierCode } from 
 export interface Stitch {
   code: string;
   mod?: ModifierCode;
+  /** Worked into a gap or chain space (`{2X}`), so it uses no stitch of the round below. */
+  free?: boolean;
   /** Stitches worked into the same base stitch share a group id. */
   group?: number;
 }
@@ -33,12 +35,16 @@ export interface ParsedRound {
   /** The text started with 魔術環 / MR. */
   magicRing: boolean;
   errors: ParseError[];
+  /** A `*到底` repeat: how many times it fitted, and how many stitches one repeat uses. */
+  auto?: { times: number; unit: number };
 }
 
 type Node =
   | { type: 'stitch'; code: string }
   | { type: 'seq'; items: Node[] }
+  /** times −1 means "repeat to the end of the round" (`*到底`). */
   | { type: 'repeat'; node: Node; times: number }
+  | { type: 'space'; node: Node }
   | { type: 'same'; node: Node }
   | { type: 'mod'; mod: ModifierCode; node: Node };
 
@@ -47,11 +53,19 @@ type Token =
   | { t: 'stitch'; v: string; at: number; end: number }
   | { t: 'mod'; v: ModifierCode; at: number }
   | { t: 'ring'; at: number }
-  | { t: '(' | ')' | '[' | ']' | '*'; at: number };
+  | { t: 'auto'; at: number }
+  | { t: '(' | ')' | '[' | ']' | '{' | '}' | '*'; at: number };
 
-const RING_WORDS = ['魔術環', '環形起針', 'MR'];
+const RING_WORDS = ['魔術環', '環形起針', '环形起针', '魔术环', '環起', '环起', 'MR'];
+const AUTO_WORDS = ['重複到底', '重复到底', '到底', '到尾', '~', '～'];
+const CN_NUM: Record<string, number> = { 一: 1, 二: 2, 兩: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+/** 「3個未完成中長針」 is one puff/bobble stitch, not three stitches. */
+const UNFINISHED = /^([0-9０-９]+|[一二兩两三四五六七八九十])?\s*[個个]?\s*未完成的?(短針|短针|中長針|中长针|長長針|长长针|長針|长针)/;
+/** 「起立2ch」「立起3鎖針」: turning chains that don't count as stitches. */
+const TURNING = /^(?:起立|立起)(?:針|针)?\s*([0-9０-９]+)?\s*(?:個|个)?\s*(?:ch|CH|Ch|鎖針|锁针|鎖|锁)?/;
 const SEPARATORS = new Set([' ', '\t', ',', '，', '、', '；', ';', '　']);
-const PUNCT: Record<string, Token['t']> = { '(': '(', '（': '(', ')': ')', '）': ')', '[': '[', '【': '[', ']': ']', '】': ']', '*': '*', '×': '*', '＊': '*' };
+const PUNCT: Record<string, Token['t']> = { '(': '(', '（': '(', ')': ')', '）': ')', '[': '[', '【': '[', ']': ']', '】': ']', '{': '{', '｛': '{', '}': '}', '｝': '}', '*': '*', '×': '*', '＊': '*' };
+const toAscii = (s: string) => s.replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
 
 export class PatternSyntaxError extends Error {
   constructor(message: string, public at: number) {
@@ -65,6 +79,26 @@ export function tokenize(src: string): Token[] {
   outer: while (i < src.length) {
     const ch = src[i];
     if (SEPARATORS.has(ch)) { i++; continue; }
+    for (const w of AUTO_WORDS) {
+      if (src.startsWith(w, i)) { out.push({ t: 'auto', at: i }); i += w.length; continue outer; }
+    }
+    const rest = src.slice(i);
+    const un = rest.match(UNFINISHED);
+    if (un) {
+      const n = un[1] ? (CN_NUM[un[1]] ?? parseInt(toAscii(un[1]), 10)) : 3;
+      const kind = un[2];
+      const code = /中/.test(kind) ? 'Q' : /短/.test(kind) ? 'B' : n >= 5 ? 'P' : 'B';
+      out.push({ t: 'stitch', v: code, at: i, end: i + un[0].length });
+      i += un[0].length;
+      continue;
+    }
+    const tu = rest.match(TURNING);
+    if (tu) {
+      if (tu[1]) out.push({ t: 'num', v: parseInt(toAscii(tu[1]), 10), at: i });
+      out.push({ t: 'stitch', v: 'tch', at: i, end: i + tu[0].length });
+      i += tu[0].length;
+      continue;
+    }
     if (PUNCT[ch]) { out.push({ t: PUNCT[ch] as '(' , at: i }); i++; continue; }
     if (/[0-9０-９]/.test(ch)) {
       let j = i;
@@ -99,13 +133,13 @@ class Parser {
     while (this.peek()?.t === 'ring') { this.magicRing = true; this.p++; }
     const seq = this.seq();
     const extra = this.peek();
-    if (extra) throw new PatternSyntaxError(extra.t === ')' || extra.t === ']' ? `多了一個「${extra.t}」` : '這裡無法接續', extra.at);
+    if (extra) throw new PatternSyntaxError(extra.t === ')' || extra.t === ']' || extra.t === '}' ? `多了一個「${extra.t}」` : '這裡無法接續', extra.at);
     return seq;
   }
 
   private seq(): Node {
     const items: Node[] = [];
-    while (this.peek() && this.peek()!.t !== ')' && this.peek()!.t !== ']') {
+    while (this.peek() && this.peek()!.t !== ')' && this.peek()!.t !== ']' && this.peek()!.t !== '}') {
       if (this.peek()!.t === 'ring') throw new PatternSyntaxError('魔術環只能寫在最前面', this.at());
       items.push(this.item());
     }
@@ -118,7 +152,7 @@ class Parser {
     if (tk.t === 'num') {
       prefix = tk.v;
       this.p++;
-      if (!this.peek() || this.peek()!.t === ')' || this.peek()!.t === ']') throw new PatternSyntaxError(`數字 ${prefix} 後面要接針法`, this.at());
+      if (!this.peek() || this.peek()!.t === ')' || this.peek()!.t === ']' || this.peek()!.t === '}') throw new PatternSyntaxError(`數字 ${prefix} 後面要接針法`, this.at());
     }
     const atomTok = this.peek()!;
     let node = this.atom();
@@ -133,11 +167,22 @@ class Parser {
       const starAt = this.at();
       this.p++;
       const n = this.peek();
-      if (n?.t !== 'num') throw new PatternSyntaxError('「*」後面要寫次數', starAt);
+      if (n?.t === 'auto') { this.p++; return this.autoRepeat(node, n.at); }
+      if (n?.t !== 'num') throw new PatternSyntaxError('「*」後面要寫次數，或寫「到底」', starAt);
       this.p++;
       node = this.repeat(node, n.v, n.at);
+    } else if (this.peek()?.t === 'auto') {
+      const at = this.at();
+      this.p++;
+      return this.autoRepeat(node, at);
     }
     return node;
+  }
+
+  autos = 0;
+  private autoRepeat(node: Node, at: number): Node {
+    if (++this.autos > 1) throw new PatternSyntaxError('一圈只能有一個「到底」', at);
+    return { type: 'repeat', node, times: -1 };
   }
 
   private repeat(node: Node, times: number, at: number): Node {
@@ -158,11 +203,13 @@ class Parser {
     }
     if (tk.t === '(') return this.group('(', ')');
     if (tk.t === '[') return { type: 'same', node: this.group('[', ']') };
+    if (tk.t === '{') return { type: 'space', node: this.group('{', '}') };
+    if (tk.t === 'auto') throw new PatternSyntaxError('「到底」前面要先寫要重複的針法，例如 (X,V)*到底', tk.at);
     if (tk.t === '*') throw new PatternSyntaxError('「*」前面要先寫針法', tk.at);
     throw new PatternSyntaxError(`這裡不該出現「${tk.t === 'num' ? tk.v : tk.t}」`, tk.at);
   }
 
-  private group(open: '(' | '[', close: ')' | ']'): Node {
+  private group(open: '(' | '[' | '{', close: ')' | ']' | '}'): Node {
     const openAt = this.at();
     this.p++; // open
     const inner = this.seq();
@@ -177,45 +224,72 @@ interface Counts { consumed: number; produced: number }
 
 const MAX_STITCHES = 5000;
 
-function expand(node: Node, out: Stitch[], mod: ModifierCode | undefined, nextGroup: { v: number }, group?: number): Counts {
+interface Ctx { nextGroup: { v: number }; autoTimes: number; unit?: number; free?: boolean }
+
+function expand(node: Node, out: Stitch[], mod: ModifierCode | undefined, ctx: Ctx, group?: number): Counts {
   switch (node.type) {
     case 'stitch': {
       if (out.length >= MAX_STITCHES) throw new PatternSyntaxError(`這一圈超過 ${MAX_STITCHES} 針，請檢查次數`, 0);
       const def = STITCH_BY_CODE[node.code];
-      out.push({ code: node.code, ...(mod ? { mod } : {}), ...(group !== undefined ? { group } : {}) });
-      return { consumed: def.consumes, produced: def.produces };
+      out.push({ code: node.code, ...(mod ? { mod } : {}), ...(group !== undefined ? { group } : {}), ...(ctx.free ? { free: true } : {}) });
+      return { consumed: ctx.free ? 0 : def.consumes, produced: def.produces };
     }
     case 'seq': {
       const c = { consumed: 0, produced: 0 };
-      for (const it of node.items) { const r = expand(it, out, mod, nextGroup, group); c.consumed += r.consumed; c.produced += r.produced; }
+      for (const it of node.items) { const r = expand(it, out, mod, ctx, group); c.consumed += r.consumed; c.produced += r.produced; }
       return c;
     }
     case 'repeat': {
       const c = { consumed: 0, produced: 0 };
-      for (let k = 0; k < node.times; k++) { const r = expand(node.node, out, mod, nextGroup, group); c.consumed += r.consumed; c.produced += r.produced; }
+      let times = node.times;
+      if (times < 0) {
+        // Measure one repeat on scratch space, then fit as many as the round allows.
+        const one = expand(node.node, [], mod, { ...ctx, nextGroup: { v: 0 } }, group);
+        ctx.unit = one.consumed;
+        times = ctx.autoTimes;
+      }
+      for (let k = 0; k < times; k++) { const r = expand(node.node, out, mod, ctx, group); c.consumed += r.consumed; c.produced += r.produced; }
       return c;
     }
     case 'mod':
-      return expand(node.node, out, node.mod, nextGroup, group);
+      return expand(node.node, out, node.mod, ctx, group);
+    case 'space': {
+      const inner = expand(node.node, out, mod, { ...ctx, free: true }, group);
+      return { consumed: 0, produced: inner.produced };
+    }
     case 'same': {
       // A nested [ ] inside [ ] stays in the outer group.
-      const g = group ?? nextGroup.v++;
-      const inner = expand(node.node, out, mod, nextGroup, g);
+      const g = group ?? ctx.nextGroup.v++;
+      const inner = expand(node.node, out, mod, ctx, g);
       return { consumed: inner.consumed > 0 ? 1 : 0, produced: inner.produced };
     }
   }
 }
 
-/** Parse one round. Never throws: syntax problems come back in `errors`. */
-export function parseRound(src: string): ParsedRound {
+/**
+ * Parse one round. Never throws: syntax problems come back in `errors`.
+ * `available` is how many stitches the round below left, used to size a `*到底` repeat.
+ */
+export function parseRound(src: string, available?: number): ParsedRound {
   const empty: ParsedRound = { stitches: [], consumed: 0, produced: 0, magicRing: false, errors: [] };
   if (!src.trim()) return empty;
   try {
     const toks = tokenize(src);
     const parser = new Parser(toks, src.length);
     const ast = parser.parse();
-    const stitches: Stitch[] = [];
-    const c = expand(ast, stitches, undefined, { v: 0 });
+    let stitches: Stitch[] = [];
+    if (parser.autos) {
+      // First pass with no repeats tells us what the rest of the round uses.
+      const probe: Ctx = { nextGroup: { v: 0 }, autoTimes: 0 };
+      const base = expand(ast, [], undefined, probe);
+      const unit = probe.unit ?? 0;
+      if (unit <= 0) throw new PatternSyntaxError('「到底」要重複的針法至少要用掉 1 針', 0);
+      const times = available === undefined ? 1 : Math.max(0, Math.floor((available - base.consumed) / unit));
+      const c = expand(ast, stitches, undefined, { nextGroup: { v: 0 }, autoTimes: times });
+      return { stitches, consumed: c.consumed, produced: c.produced, magicRing: parser.magicRing, errors: [], auto: { times, unit } };
+    }
+    stitches = [];
+    const c = expand(ast, stitches, undefined, { nextGroup: { v: 0 }, autoTimes: 0 });
     return { stitches, consumed: c.consumed, produced: c.produced, magicRing: parser.magicRing, errors: [] };
   } catch (e) {
     if (e instanceof PatternSyntaxError) return { ...empty, errors: [{ message: e.message, at: e.at }] };

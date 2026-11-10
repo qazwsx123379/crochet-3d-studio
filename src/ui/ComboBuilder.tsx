@@ -52,7 +52,8 @@ export function buildCombo(kind: ComboKind, seq: string[], times: number, loop: 
   const inner = seqText(seq, false);
   const single = seq.length === 1;
   // One stitch: X*6. A group: (X,V)*6. No repeat: the group as written.
-  const body = times <= 1 ? inner : single ? `${inner}*${times}` : `(${inner})*${times}`;
+  // times 0 = repeat to the end of the round.
+  const body = times === 0 ? (single ? `${inner}*到底` : `(${inner})*到底`) : times <= 1 ? inner : single ? `${inner}*${times}` : `(${inner})*${times}`;
   return kind === 'loop' ? `${loop}(${body})` : body;
 }
 
@@ -85,7 +86,7 @@ export default function ComboBuilder({ kind: initial, rowLabel, expected, onInse
   }, []);
 
   const text = buildCombo(kind, seq, times, loop);
-  const parsed = useMemo(() => (text ? parseRound(text) : null), [text]);
+  const parsed = useMemo(() => (text ? parseRound(text, expected) : null), [text, expected]);
   const unit = useMemo(() => (seq.length ? parseRound(kind === 'same' ? `[${seqText(seq, true)}]` : seqText(seq, false)) : null), [seq, kind]);
 
   const intro = kind === 'repeat'
@@ -150,9 +151,14 @@ export default function ComboBuilder({ kind: initial, rowLabel, expected, onInse
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
               {kind === 'same' ? '這樣做' : kind === 'loop' && seq.length === 1 ? '針數' : '重複'}
               <button className="btn icon sm" aria-label="減少" onClick={() => setTimes((t) => Math.max(1, t - 1))}>−</button>
-              <input className="input" type="number" min={1} max={200} value={times} onChange={(e) => setTimes(Math.max(1, Math.min(200, Number(e.target.value) || 1)))} style={{ width: 70, height: 32, textAlign: 'center' }} aria-label="次數" />
+              <input className="input" type="number" min={1} max={200} value={times || ''} placeholder="到底" onChange={(e) => setTimes(Math.max(1, Math.min(200, Number(e.target.value) || 1)))} style={{ width: 70, height: 32, textAlign: 'center' }} aria-label="次數" />
               <button className="btn icon sm" aria-label="增加" onClick={() => setTimes((t) => Math.min(200, t + 1))}>＋</button>
               {kind === 'loop' && seq.length === 1 ? '針' : '次'}
+              {kind !== 'same' && (
+                <button className="btn sm" aria-pressed={times === 0} onClick={() => setTimes((t) => (t === 0 ? 6 : 0))} title="不用算次數：重複到上一圈的針用完為止">
+                  {times === 0 ? '✓ ' : ''}重複到底
+                </button>
+              )}
             </label>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
               <span className="muted" style={{ fontSize: 13 }}>寫法</span>
@@ -161,7 +167,7 @@ export default function ComboBuilder({ kind: initial, rowLabel, expected, onInse
             {parsed && unit && !parsed.errors.length && (
               <p className="muted" style={{ margin: 0, fontSize: 13 }}>
                 {kind === 'same' ? `同一針裡鉤 ${seqWords(seq)}` : `一組是 ${seqWords(seq)}`}
-                {times > 1 ? `，做 ${times} 次` : ''}。總共用掉上一圈 <b style={{ color: 'var(--ink)' }}>{parsed.consumed}</b> 針，產生 <b style={{ color: 'var(--ink)' }}>{parsed.produced}</b> 針。
+                {times > 1 ? `，做 ${times} 次` : times === 0 && parsed.auto ? `，重複到底（${parsed.auto.times} 次）` : ''}。總共用掉上一圈 <b style={{ color: 'var(--ink)' }}>{parsed.consumed}</b> 針，產生 <b style={{ color: 'var(--ink)' }}>{parsed.produced}</b> 針。
               </p>
             )}
             {parsed && !parsed.errors.length && expected !== undefined && (

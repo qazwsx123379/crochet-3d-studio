@@ -61,8 +61,53 @@ function splitIncreases(list: Placement[], rounds: ShapeRound[]): Placement[] {
   return out;
 }
 
+/**
+ * 「環起 3ch，四個未完成長針，1ch，拉緊」: a single puff pulled tight in a ring
+ * is a little ball (a cherry, a berry), not a round of fabric.
+ */
+function bobbleBall(rounds: ShapeRound[], yarn: boolean): RenderData | null {
+  if (rounds.length !== 1) return null;
+  const r = rounds[0];
+  const bumps = r.info.stitches.map((s, i) => ({ s, i })).filter(({ s }) => STITCH_BY_CODE[s.code]?.shape === 'bump');
+  if (!bumps.length || r.info.produced > 8) return null;
+  const R = 1.05;
+  const hex = r.hexes[bumps[0].i] ?? r.hexes[0] ?? '#cc3333';
+  // Fill: a slightly squashed sphere.
+  const seg = 24, ring = 16;
+  const pos: number[] = [], col: number[] = [], idx: number[] = [], fr: number[] = [], fs: number[] = [];
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (c: number) => { const v = c / 255; return (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4) * (yarn ? 0.55 : 1); };
+  for (let a = 0; a <= ring; a++) for (let b = 0; b <= seg; b++) {
+    const th = (a / ring) * Math.PI, ph = (b / seg) * Math.PI * 2;
+    pos.push(R * Math.sin(th) * Math.cos(ph), R * 0.92 * Math.cos(th) + R, R * Math.sin(th) * Math.sin(ph));
+    col.push(lin((n >> 16) & 255), lin((n >> 8) & 255), lin(n & 255));
+  }
+  for (let a = 0; a < ring; a++) for (let b = 0; b < seg; b++) {
+    const i = a * (seg + 1) + b, j = i + seg + 1;
+    idx.push(i, j, i + 1, i + 1, j, j + 1);
+    fr.push(1, 1); fs.push(bumps[0].i, bumps[0].i);
+  }
+  // Yarn: the puff's loops run from pole to pole like the segments of an orange.
+  const loops = 6;
+  const placements: Placement[] = [];
+  for (let k = 0; k < loops; k++) {
+    const ph = (k / loops) * Math.PI * 2;
+    const normal: V3 = [Math.cos(ph), 0, Math.sin(ph)];
+    placements.push({ pos: [normal[0] * R * 0.78, R, normal[2] * R * 0.78], tangent: [-Math.sin(ph), 0, Math.cos(ph)], up: [0, 1, 0], normal, width: 1.15, height: 1.75, hex, shape: 'bump', roundNo: 1, index: bumps[0].i });
+  }
+  const ringPts: V3[] = Array.from({ length: 25 }, (_, k) => [Math.cos((k / 24) * Math.PI * 2) * R, R, Math.sin((k / 24) * Math.PI * 2) * R]);
+  return {
+    positions: new Float32Array(pos), colors: new Float32Array(col), index: new Uint32Array(idx), faceRound: new Int32Array(fr), faceStitch: new Int32Array(fs),
+    placements, rings: new Map([[1, ringPts]]), center: [0, R, 0], radius: R * 1.4, minY: 0.08 * R, maxY: R * 1.92, doubleSided: false,
+  };
+}
+
 /** `yarn` darkens the fill so it reads as the shadow between stitches. */
 export function prepareRender(rounds: ShapeRound[], opts: ShapeOptions, yarn: boolean): RenderData | null {
+  if (opts.start === 'ring' && opts.method !== 'flat') {
+    const ball = bobbleBall(rounds, yarn);
+    if (ball) return ball;
+  }
   const base = buildShape(rounds, opts);
   if (!base) return null;
   const relaxed = relaxShape(base, rounds, { ...opts, fillShade: yarn ? 0.55 : 1 });

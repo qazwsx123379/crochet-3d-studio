@@ -7,7 +7,7 @@
  * which a perfect surface of revolution cannot show. With stuffing, a gentle
  * outward pressure fills the shape out.
  */
-import { STITCH_BY_CODE } from '../pattern/stitches';
+import { STITCH_BY_CODE, consumesOf } from '../pattern/stitches';
 import type { BuiltShape, Placement, ShapeOptions, ShapeRound } from './geometry';
 
 type V3 = [number, number, number];
@@ -86,10 +86,10 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
       if (st.group !== undefined && st.group === lastGroup) parents = groupParents;
       else if (st.group !== undefined) {
         // [ … ] uses one stitch of the round below for the whole group.
-        const groupConsumes = r.info.stitches.some((s) => s.group === st.group && STITCH_BY_CODE[s.code]?.consumes) ? 1 : 0;
+        const groupConsumes = r.info.stitches.some((s) => s.group === st.group && consumesOf(s)) ? 1 : 0;
         parents = take(groupConsumes);
         groupParents = parents;
-      } else parents = take(def.consumes);
+      } else parents = take(consumesOf(st));
       lastGroup = st.group;
       const pl = placementIndex.get(`${r.info.no}:${k}`);
       if (!pl) return; // a skipped stitch leaves no stitch of its own
@@ -105,19 +105,73 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
   }
   if (!byRound.size) return null;
 
+  // Flat pieces: the starting guess stretches every row to the widest one, so
+  // restart from rows at their true width, stacked at their true heights.
+  if (flat) {
+    const rowsIds = [...byRound.values()];
+    const widthsOf = (ids: number[]) => ids.map((i) => (nodes[i].parents.length || ids.every((j) => !nodes[j].parents.length) ? Math.max(0.5, nodes[i].produces) : 0.5));
+    const totals = rowsIds.map((ids) => widthsOf(ids).reduce((a, b) => a + b, 0));
+    const heights = rowsIds.map((ids) => ids.reduce((m, i) => Math.max(m, nodes[i].height), 0.5));
+    const ys: number[] = [];
+    heights.reduce((y, h) => { ys.push(y + h); return y + h; }, 0);
+    // How fast rows get longer as the piece grows. Growth that keeps going row
+    // after row bends the piece into a fan or ring (a collar); a single row
+    // that suddenly doubles ruffles instead, so a median ignores it.
+    const slopes = totals.slice(1).map((t, r) => (t - totals[r]) / heights[r + 1]).sort((a, b) => a - b);
+    const slope = !slopes.length ? 0 : slopes.length >= 4
+      ? (slopes[(slopes.length - 1) >> 1] + slopes[slopes.length >> 1]) / 2
+      : slopes.reduce((a, b) => a + b, 0) / slopes.length;
+    const theta = Math.min(Math.PI * 1.9, Math.max(0, slope));
+    const R0 = theta > 0.05 ? totals[0] / theta - ys[0] : 0;
+    let prevSpan = 0;
+    rowsIds.forEach((ids, r) => {
+      const widths = widthsOf(ids);
+      const total = totals[r];
+      const y = ys[r];
+      // Room this row has: its arc in the fan, or about the row below. Anything
+      // longer starts as a wave so it ruffles instead of stretching the piece.
+      const room = theta > 0.05 ? theta * (R0 + y) : prevSpan ? prevSpan * 1.15 : total;
+      const span = Math.min(total, Math.max(room, prevSpan * 0.6));
+      const squeeze = span / total;
+      const amp = total > span * 1.05 ? Math.min(3, (4 * Math.sqrt(total / span - 1)) / Math.PI) : 0;
+      const first = nodes[ids[0]].p, last = nodes[ids[ids.length - 1]].p;
+      const dir = last[0] >= first[0] ? 1 : -1;
+      let x = -total / 2;
+      ids.forEach((i, k) => {
+        x += widths[k] / 2;
+        const z = amp ? amp * Math.sin((x / 4) * Math.PI * 2) : nodes[i].p[2];
+        const u = dir * x * squeeze;
+        if (theta > 0.05) {
+          const R = R0 + y, phi = u / R;
+          nodes[i].p = [R * Math.sin(phi), R * Math.cos(phi) - R0, z];
+        } else nodes[i].p = [u, y, z];
+        x += widths[k] / 2;
+      });
+      prevSpan = span;
+    });
+  }
+
   // ---- constraints ----
   type Link = [number, number, number, number]; // a, b, rest length, stiffness
   const links: Link[] = [];
   const roundLists = [...byRound.values()];
   for (const ids of roundLists) {
     const n = ids.length;
+    // The starting chain has nothing below it; its chains are full stitch widths.
+    const anchored = ids.some((i) => nodes[i].parents.length > 0);
     for (let k = 0; k < n; k++) {
       if (n < 2) break;
       const a = ids[k], b = ids[(k + 1) % n];
       if (k === n - 1 && (n < 3 || flat)) break;
+      // A chain is a short link of yarn: a run of chains between two stitches
+      // bulges out as an arch instead of stretching the whole row.
+      if (anchored && (!nodes[a].parents.length || !nodes[b].parents.length)) {
+        links.push([a, b, nodes[a].placement!.shape === 'chain' && nodes[b].placement!.shape === 'chain' ? 0.5 : 0.62, 0.7]);
+        continue;
+      }
       // An increase makes two stitches on top, so it is two stitch widths wide.
       const widths = (Math.max(0.5, nodes[a].produces) + Math.max(0.5, nodes[b].produces)) / 2;
-      const w = (len(sub(nodes[a].placement!.pos, nodes[b].placement!.pos)) + widths) / 2; // between the guess and the true width
+      const w = flat ? widths : (len(sub(nodes[a].placement!.pos, nodes[b].placement!.pos)) + widths) / 2; // between the guess and the true width
       links.push([a, b, w, 0.7]);
     }
   }
@@ -129,7 +183,10 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
       for (let d = 1; d < ids.length; d++) {
         const nb = nodes[ids[(k - d + ids.length) % ids.length]].parents.length ? ids[(k - d + ids.length) % ids.length] : nodes[ids[(k + d) % ids.length]].parents.length ? ids[(k + d) % ids.length] : -1;
         if (nb < 0) continue;
-        for (const par of nodes[nb].parents) links.push([id, par, len(sub(nodes[id].p, nodes[par].p)), 0.2]);
+        // Rest length: about as far as the chain can reach along the arch, never the
+        // (possibly huge) distance in the starting guess.
+        const reach = nodes[nb].height + 0.45 * d;
+        for (const par of nodes[nb].parents) links.push([id, par, Math.min(len(sub(nodes[id].p, nodes[par].p)), reach), 0.2]);
         break;
       }
     });
@@ -146,7 +203,16 @@ export function relaxShape(base: BuiltShape, rounds: ShapeRound[], opts: ShapeOp
   const P = nodes.map((n) => [...n.p] as V3);
   const closed = opts.stuffed && roundLists.length > 3 && roundLists[roundLists.length - 1].length <= Math.max(8, roundLists.reduce((m, l) => Math.max(m, l.length), 0) * 0.5);
   const iterations = flat ? Math.min(220, Math.max(80, Math.round(200000 / Math.max(1, links.length)))) : Math.min(90, Math.max(30, Math.round(120000 / Math.max(1, links.length))));
+  // A flat piece stays flat where its rows don't grow much; only rows much
+  // longer than the row below ruffle out of the plane.
+  const flatPull: number[] = [];
+  if (flat) roundLists.forEach((ids, r) => {
+    const ratio = r > 0 ? ids.length / Math.max(1, roundLists[r - 1].length) : 1;
+    const k = ratio <= 1.2 ? 0.08 : ratio <= 1.6 ? 0.03 : 0.004;
+    for (const i of ids) flatPull[i] = k;
+  });
   for (let it = 0; it < iterations; it++) {
+    if (flat) for (let i = 0; i < P.length; i++) if (flatPull[i]) P[i][2] -= P[i][2] * flatPull[i];
     // Keep rounds smooth so the fabric doesn't crumple.
     for (const ids of roundLists) {
       const n = ids.length;

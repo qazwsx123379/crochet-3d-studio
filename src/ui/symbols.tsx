@@ -30,7 +30,7 @@ function Cross({ color, cx = 0, cy = 0, s = 0.26 }: { color: string; cx?: number
 export function StitchSymbol({ code, color, mod }: Props) {
   let body: JSX.Element;
   switch (code) {
-    case 'ch': body = <ellipse rx={0.3} ry={0.17} stroke={color} strokeWidth={W} fill="none" />; break;
+    case 'ch': case 'tch': body = <ellipse rx={0.3} ry={0.17} stroke={color} strokeWidth={W} fill="none" />; break;
     case 'sl': body = <ellipse rx={0.13} ry={0.13} fill={color} />; break;
     case 'X': body = <Cross color={color} />; break;
     case 'T': body = <Post bars={0} color={color} />; break;
